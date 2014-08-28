@@ -1,9 +1,8 @@
 {-# LANGUAGE TemplateHaskell #-}
 module AgentTypes where
 import Control.Lens
-import Control.Monad.State
 import qualified Data.IntMap as Map
-import Data.List
+import Data.Maybe
 
 type Wid = Int
 type WorkerMap = Map.IntMap Worker
@@ -72,7 +71,7 @@ makeProducer = Producer {
     _pProductivity = 1.0,
     _pQuantity = 5.0,
     _pProfit = 0,
-    _pNomSales = 0,
+    _pNomSales = 1.0,
     _pGoods = Nothing,
     _pCash = 10.0,
     _pClosing = 10.0,
@@ -84,7 +83,7 @@ makeProducer = Producer {
 
 makeBank = Bank {
     _bCash = 10.0,
-    _bMarkUp = \a -> a*0.1, -- check this!
+    _bMarkUp = (*0.1), -- check this!
     _bDebt = 0
 }
 
@@ -96,7 +95,7 @@ class Firm a where
     makeEntrant :: a -> a
 
 instance Firm Producer where
-    isSolvent a = (a^.pDebt) == Nothing
+    isSolvent a = isNothing (a^.pDebt)
     makeEntrant a = a&pWorkers .~ [] 
 
 instance Firm Bank where
