@@ -5,13 +5,14 @@ import Control.Monad.State
 import System.Random
 
 import AgentTypes
+import Debug.Trace
 
 -- Parameters:
 seed            = 1     :: Int
 workerN         = 500   :: Int
 producerN       = 100   :: Int
 bankN           = 10    :: Int
-duration        = 1000  :: Int
+duration        = 1000    :: Int
 mrC1            = 0.5   :: Double-- when income
 mrC2            = 1.0   :: Double-- when no income
 rdinv1          = 0.1   :: Double-- for rich
@@ -26,9 +27,8 @@ creditTrials    = 2     :: Int
 
 type Simulation = State SimState
 
-data SimData = SimData {
-    _pLevel :: (String, Double)
-}
+type SimData = [(String, Double)]
+
 
 data SimState = SimState {
     _workers     :: WorkerMap,
@@ -39,6 +39,7 @@ data SimState = SimState {
     _bankIds     :: [Bid],
     _sRandoms    :: [Double],
     _priceLevel  :: Money,
+    _avgPrice    :: Money,
     _timer       :: Int,
     _iRate       :: Double,
     _aRSales     :: Double,
@@ -46,7 +47,6 @@ data SimState = SimState {
 }
 
 makeLenses ''SimState
-makeLenses ''SimData
 
 startSim = SimState {
     _workers = makeMapWith wids makeWorker,
@@ -57,6 +57,7 @@ startSim = SimState {
     _bankIds = bids,
     _sRandoms = rands,
     _priceLevel = 1.0,
+    _avgPrice = 1.0,
     _timer = 0,
     _iRate = 0.02,
     _aRSales = 0,
@@ -71,8 +72,9 @@ startSim = SimState {
 collectData :: Simulation SimData
 collectData =  do    
     pl <- use priceLevel
-    return SimData {
-        _pLevel = ("Pricelevel: ", pl)
-        }
+    rs <- use aRSales
+    return [("log_price_level", log pl),
+           ("price_level", pl),
+           ("gdp", rs)]
 
 

@@ -18,6 +18,7 @@ cabal-version:       >=1.10
 executable gaffeo2008
   main-is:             Gaffeo2008.hs
   other-extensions:    TemplateHaskell
-  build-depends:       base >=4.7 && <4.8, lens, mtl, containers, random
+  build-depends:       base >=4.7 && <4.8, lens, mtl, containers, random,
+                       data-default-class, Chart, Chart-cairo, colour
   hs-source-dirs:      ./Gaffeo2008
   default-language:    Haskell2010

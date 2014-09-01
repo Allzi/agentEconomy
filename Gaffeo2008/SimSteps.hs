@@ -13,7 +13,6 @@ import Simulation
 
 simStep :: Simulation SimData
 simStep = do
-    solvensyStep
     devStep
     planStep
     laborStep
@@ -21,8 +20,9 @@ simStep = do
     productionStep
     consStep
     moneyStep
+    solvensyStep
     timer += 1
-    -- Comes from Simulation.hs    
+    -- Comes from Simulation.hs  
     collectData
 
 --------------Generic stuff-------------------
@@ -53,33 +53,6 @@ shuffle l n = do
     sRandoms .= rs'
     return shuffled
 
----------------Solvensy checks------------------
-solvensyStep :: Simulation ()
-solvensyStep = do 
-    rs <- use sRandoms
-    fs <- use producers
-    bs <- use banks
-    let (rs', nFirms) = insolvensies rs fs
-    let (rs'', nBanks) = insolvensies rs' bs
-    producers .= nFirms
-    banks .= nBanks
-    sRandoms .= rs'' 
-
--- atm gives error if no solvent firms
-insolvensies :: Firm a => [Double] -> Map.IntMap a -> ([Double], Map.IntMap a)
-insolvensies rs fs = (rs', Map.union newFs goodFs)
-  where
-    (goodFs, badFs) = Map.partition isSolvent fs
-    goodList = Map.elems goodFs
-    (rs', newFs) = Map.mapAccum (randEntrant goodList (length goodList)) rs badFs
-
---replaces something with a random element of a list
-randEntrant :: Firm a => [a] -> Int -> [Double] -> a -> ([Double], a)
-randEntrant selection num (r:rs) _ = (rs, a')
-  where
-    a = selection !! floor (fromIntegral num *r)
-    a' = makeEntrant a
-
 ------------------New productivities---------------------
 devStep :: Simulation ()
 devStep = simplePStep develop
@@ -88,11 +61,15 @@ develop :: [Double] -> Producer -> ([Double] ,Producer)
 develop (r:rs) pr = (rs, nprod)
   where
     nprod = pr&pProductivity +~ exponNum r mu
-              &pCash -~ contr
-    mu = if contr > 0
-            then contr * rdinv1
-            else 0 
-    contr = pr^.pProfit / pr^.pNomSales
+           --   &pCash -~ contr
+    mu = 
+        if contr > 0
+            then contr / pr ^. pNomSales
+            else 0
+    contr = 
+        if pr^.pProfit > 0
+            then pr^.pProfit * rdinv1
+            else 0
 
 -- takes a random number in [0,1] and mean
 exponNum :: Double -> Double -> Double
@@ -101,8 +78,8 @@ exponNum r mu = (-mu) * log r
 ----------------Plans for production-------------------
 planStep :: Simulation ()
 planStep = do
-    pl <- use priceLevel
-    simplePStep (updatePlan pl)
+    avgP <- use avgPrice
+    simplePStep (updatePlan avgP)
 
 updatePlan :: Money -> [Double] -> Producer -> ([Double] ,Producer)
 updatePlan p (r:rs) prod = if prod'^.pPrice < prod'^.pAC
@@ -377,7 +354,42 @@ banking bid = do
     banks.ix bid.=b'
 
 
----------------Global Information----------------
---Minimum wage?
+---------------Solvensy checks------------------
+solvensyStep :: Simulation ()
+solvensyStep = do 
+    rs <- use sRandoms
+    fs <- use producers
+    bs <- use banks
+    let (rs', nFirms) = insolvensies rs fs
+    let (rs'', nBanks) = insolvensies rs' bs
+    producers .= nFirms
+    banks .= nBanks
+    sRandoms .= rs'' 
 
+-- atm gives error if no solvent firms
+insolvensies :: Firm a => [Double] -> Map.IntMap a -> ([Double], Map.IntMap a)
+insolvensies rs fs = (rs', Map.union newFs goodFs)
+  where
+    (goodFs, badFs) = Map.partition isSolvent fs
+    goodList = Map.elems goodFs
+    (rs', newFs) = Map.mapAccum (randEntrant goodList (length goodList)) rs badFs
+
+--replaces something with a random element of a list
+randEntrant :: Firm a => [a] -> Int -> [Double] -> a -> ([Double], a)
+randEntrant selection num (r:rs) _ = 
+    if (num<1) 
+        then error "Error: no solvent firms left!"
+        else (rs, a')
+  where
+    a = selection !! floor (fromIntegral num *r)
+    a' = makeEntrant a
+
+
+
+---------------Global Information----------------
+infoStep :: Simulation ()
+infoStep = do
+    ps <- use $ producers
+    let avgP = (Map.foldl (\acc p -> acc+(p^.pPrice)) 0 ps)/fromIntegral producerN
+    avgPrice .= avgP
 
