@@ -77,4 +77,21 @@ collectData =  do
            ("price_level", pl),
            ("gdp", rs)]
 
+randSim :: ([Double] -> ([Double], a)) -> Simulation a
+randSim randFunc = do
+    rs <- use sRandoms
+    let (rs', a) = randFunc rs
+    sRandoms .= rs'
+    return a
 
+mapMw :: (Worker -> Simulation Worker) -> Simulation ()
+mapMw f = do
+    ws <- use workers
+    ws' <- mapMOf traverse f ws
+    workers .= ws'
+
+mapMp :: (Producer -> Simulation Producer) -> Simulation ()
+mapMp f = do
+    ps <- use producers
+    ps' <- mapMOf traverse f ps
+    producers .= ps'

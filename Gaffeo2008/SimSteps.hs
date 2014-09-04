@@ -28,12 +28,9 @@ simStep = do
 --------------Generic stuff-------------------
 simplePStep :: ([Double] -> Producer -> ([Double], Producer)) -> Simulation()
 simplePStep f = do
-    sim <- get
-    let rs = sim^.sRandoms
-        prs = sim^.producers
-        (rs', newProducers) =  Map.mapAccum f rs prs
+    prs <- use producers
+    newProducers <- randSim (\rs -> Map.mapAccum f rs prs)
     producers .= newProducers
-    sRandoms .= rs'
 
 --very slow random index taker
 randIds :: Eq a => [Double] -> [a] -> Int -> Int-> ([Double],[a])
@@ -47,11 +44,8 @@ randIds (r:rs) ids idNum toTake = (rs', i:ls)
     ids' = delete i ids
 
 shuffle ::Eq a => [a]-> Int -> Simulation [a]
-shuffle l n = do
-    rs <- use sRandoms
-    let (rs', shuffled) = randIds rs l n n
-    sRandoms .= rs'
-    return shuffled
+shuffle l n =
+    randSim (\rs -> randIds rs l n n)
 
 ------------------New productivities---------------------
 devStep :: Simulation ()
@@ -103,72 +97,83 @@ updatePlan p (r:rs) prod = if prod'^.pPrice < prod'^.pAC
 --     - not good at all
 laborStep :: Simulation ()
 laborStep = do
-    sim <- get
-    --empty proposals
-    producers %= fmap (\a -> a&pNAppls.~[])
-    --shuffle the order of workers
-    shuffled <- shuffle (sim^.workerIds) workerN
-    --each worker sends applications
-    mapM_ searchJob (sim^.workerIds)
-    --remove old employment statuses for hiring
-    workers %= fmap (\a -> a&wEmployer .~ Nothing
-                            &wIncome .~ 0)
-    --hiring
-    pids <- use producerIds
-    shuffleds <- shuffle pids producerN
-    mapM_ hire shuffleds
+    mapMp planHiring
+    -- Send applications
+    mapMw searchJob
+    -- Send offers
+    mapMp sendOffers
+    -- Sign contracts
+    mapMw signContract
+   
 
-searchJob :: Wid -> Simulation ()
-searchJob wid = do
-    Just w <- use $ workers.at wid -- can fail, if something stupid is happening
+planHiring :: Producer -> Simulation Producer
+planHiring p = do
+    let sorted = sortBy (compare `on` snd) $ p^.pWorkers
+    p' <- randSim (\rs -> calcDemand rs p)
+    return $ p'&pApplicants.~[]
+               &pWorkers .~ sorted
+
+searchJob :: Worker -> Simulation Worker
+searchJob w = do
     pids <- use producerIds
-    case w^.wEmployer of
-        Just eid -> do
-            Just emp <- use $ producers . at eid
+    apps <- case w^.wEmployer of
+        Just pid -> do
+            Just emp <- use $ producers . at pid
             if not $ null (emp^.pWorkers)
-                then otherApps (delete wid pids) (producerN-1) (laborTrials-1)
-                else otherApps pids producerN laborTrials
-        Nothing -> otherApps pids producerN laborTrials
+                then randApps (delete pid pids) (producerN-1) (laborTrials-1)
+                else randApps pids producerN laborTrials
+        Nothing -> randApps pids producerN laborTrials
+    mapM_ send apps
+    return $ w&wOffers.~[]
+              &wEmployer .~ Nothing
   where
-    otherApps :: [Pid] -> Int -> Int -> Simulation ()
-    otherApps pids pN trialN = do
-        rs <- use sRandoms
-        let (rs', pids') = randIds rs pids pN trialN
-        mapM_ (\p -> producers . ix p . pNAppls %= (wid:)) pids'
-        sRandoms .= rs'
+    randApps ids n1 n2 =
+        randSim (\rs -> randIds rs ids n1 n2)
+    send pid =
+        producers.ix pid.pApplicants %= ((w^.wID):)
 
-hire :: Pid -> Simulation ()
-hire pid = do
-    calcOffer
-    -- Just a little bit sorting :)
-    producers . ix pid . pWorkers %= sortBy (compare `on` snd)
-    Just p <- use $ producers . at pid -- Can fail
-    let ow = p^.pWorkers
-        nas = p^.pNAppls
-        w = p^.pEntrantWage
-        nw = fmap (\a -> (a,w)) nas
-        allw = ow ++ nw
-    producers . ix pid . pWorkers .= []
-    mapM_ tryHire allw 
+sendOffers :: Producer -> Simulation Producer
+sendOffers p = do
+    let apps = p^.pApplicants
+    shuffled <- shuffle apps (length apps)
+    let all = (p^.pWorkers) ++ (fmap (\a -> (a, p^.pEntrantWage)) shuffled)
+        receirvers = take (p^.pLDemand) all
+    mapM_ send receirvers
+    return p
   where
-    tryHire :: (Wid, Money) -> Simulation ()
-    tryHire a@(wid, wage) = do
-        Just w <- use $ workers.at wid
-        Just p <- use $ producers.at pid
-        when ((length (p^.pWorkers) < p^.pLDemand) && isNothing (w^.wEmployer)) $ do
-            workers . ix wid . wEmployer .= Just pid
-            workers . ix wid . wIncome .= wage
-            producers . ix pid . pWorkers %= (a:)
-            producers . ix pid . pCash -= wage
-    calcOffer :: Simulation ()
-    calcOffer = do
-        Just p <- use $ producers . at pid -- Can fail
-        let ldemand = ceiling (p^.pQuantity / p^.pProductivity)
-        producers . ix pid . pLDemand .= ldemand
-        when (ldemand > length  (p^.pWorkers)) $ do
-            (r:rs) <- use sRandoms
-            producers . ix pid . pEntrantWage *= (1+r*wageGrowth)
-            sRandoms .= rs
+    pid = p^.pID
+    send (wid, wage) = do
+        workers.ix wid.wOffers %= ((pid, wage):)
+
+signContract :: Worker -> Simulation Worker
+signContract w = do
+    let best = choose $ w^.wOffers
+    sign best
+  where
+    choose a = 
+        if not $ null a
+            then Just $ maximumBy (compare `on` snd) a
+            else Nothing
+    sign :: Maybe (Pid, Money) -> Simulation Worker
+    sign (Just (pid, wage)) = do
+        producers.ix pid.pWorkers %= ((w^.wID, wage):)
+        return $ w&wIncome .~ wage
+                  &wEmployer .~ Just pid
+    sign Nothing = do
+        return $ w&wIncome .~ 0
+                  &wEmployer .~ Nothing
+
+
+calcDemand :: [Double] -> Producer -> ([Double], Producer)
+calcDemand (r:rs) p = (rs, p')
+  where 
+    ldemand = ceiling (p^.pQuantity / p^.pProductivity)
+    wagemult = 
+        if ldemand > length (p^.pWorkers)
+            then (1+r*wageGrowth)
+            else 1
+    p' = p&pLDemand .~ ldemand
+          &pEntrantWage*~ wagemult
 
 ---------------Credit markets---------------
 creditStep :: Simulation ()
@@ -176,9 +181,8 @@ creditStep = do
     pids <- use producerIds
     shuffled <- shuffle pids producerN
     mapM_ getFinance pids
-    bs <- use banks
     rate <- use iRate
-    banks .= fmap (bankFinance rate) bs
+    banks %= fmap (bankFinance rate)
   
 getFinance :: Pid -> Simulation ()
 getFinance pid = do
@@ -187,9 +191,7 @@ getFinance pid = do
     let need = -(p^.pCash)
     when (need>0) $ do
         -- get random banks
-        rs <- use sRandoms
-        let (rs', bs) = randIds rs bIds bankN creditTrials
-        sRandoms .= rs'
+        bs <- randSim (\rs -> randIds rs bIds bankN creditTrials)
         --get offers and choose best
         let leverage = need/(p^.pClosing)
         offers <- mapM (getOffer leverage) bs
@@ -207,7 +209,8 @@ getFinance pid = do
         cRate <- use iRate
         Just b <- use $ banks . at bId
         let mUp = b^.bMarkUp
-        let rate = cRate * (1 + r * bankCosts * mUp leverage)
+            rate = cRate * (1 + r * bankCosts * mUp leverage)
+        sRandoms .= rs
         return (bId, rate)
 
 bankFinance :: Double -> Bank -> Bank
@@ -250,7 +253,6 @@ consStep = do
 consume :: Wid -> Simulation ()
 consume wid = do
     Just w <- use $ workers . at wid
-    rs <- use sRandoms
     pids <- use producerIds
     let income = w^.wIncome
         demand = if income>0 
@@ -259,13 +261,10 @@ consume wid = do
     shops <- case w^.wShop of
         Just pid -> do
             let filtered = delete pid pids
-                (rs', rpids) = randIds rs filtered (producerN-1) (consTrials-1)
-            sRandoms .= rs'
+            rpids <- randSim (\rs -> randIds rs filtered (producerN-1) (consTrials-1))
             return (pid:rpids)
-        Nothing -> do
-            let (rs', rpids) = randIds rs pids producerN consTrials
-            sRandoms .= rs'
-            return rpids
+        Nothing ->
+            randSim (\rs -> randIds rs pids producerN consTrials)
     priced <- mapM getPrice shops
     let sorted = sortBy (compare `on` snd) priced
     (remain, visited) <- foldM buy (demand, []) sorted
@@ -353,7 +352,6 @@ banking bid = do
               &bDebt .~ 0
     banks.ix bid.=b'
 
-
 ---------------Solvensy checks------------------
 solvensyStep :: Simulation ()
 solvensyStep = do 
@@ -376,13 +374,13 @@ insolvensies rs fs = (rs', Map.union newFs goodFs)
 
 --replaces something with a random element of a list
 randEntrant :: Firm a => [a] -> Int -> [Double] -> a -> ([Double], a)
-randEntrant selection num (r:rs) _ = 
+randEntrant selection num (r:rs) old = 
     if (num<1) 
         then error "Error: no solvent firms left!"
         else (rs, a')
   where
     a = selection !! floor (fromIntegral num *r)
-    a' = makeEntrant a
+    a' = (makeEntrant a)&idLens.~(old^.idLens)
 
 
 

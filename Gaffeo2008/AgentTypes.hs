@@ -15,21 +15,24 @@ type Stuff = Double
 
 
 data Worker = Worker {
+    _wID :: Wid,
     _wEmployer :: Maybe Pid,
+    _wOffers :: [(Pid, Money)],
     _wIncome :: Money,
     _wSavings :: Money,
     _wShop :: Maybe Pid
 }
 
 data Producer = Producer {
+    _pID :: Pid,
     --Plans
     _pQuantity :: Stuff,
     _pPrice :: Money,
     _pAC :: Money,
     --Labor
     _pWorkers :: [(Wid, Money)],
+    _pApplicants :: [Wid],
     _pLDemand :: Int,
-    _pNAppls :: [Wid],
     _pEntrantWage :: Money,
     --Production
     _pProductivity :: Double,
@@ -43,6 +46,7 @@ data Producer = Producer {
 }
 
 data Bank = Bank {
+    _bID :: Bid,
     _bCash :: Money,
     _bMarkUp :: Double -> Double,
     _bDebt :: Money
@@ -52,11 +56,13 @@ makeLenses ''Worker
 makeLenses ''Producer
 makeLenses ''Bank
 
-makeMapWith :: [Int] -> a -> Map.IntMap a
-makeMapWith ids a = Map.fromList $ fmap (\i -> (i, a)) ids
+makeMapWith :: [Int] -> (Int -> a) -> Map.IntMap a
+makeMapWith ids a = Map.fromList $ fmap (\i -> (i, a i)) ids
 
-makeWorker = Worker {
+makeWorker i = Worker {
+    _wID = i,
     _wEmployer = Nothing,
+    _wOffers = [],
     _wIncome = 0,
     _wSavings = 10,
     _wShop = Nothing
@@ -64,9 +70,10 @@ makeWorker = Worker {
 
 
 
-makeProducer = Producer {
+makeProducer i = Producer {
+    _pID = i,
     _pWorkers = [],
-    _pNAppls = [],
+    _pApplicants = [],
     _pPrice = 1.0,
     _pProductivity = 1.0,
     _pQuantity = 5.0,
@@ -81,9 +88,10 @@ makeProducer = Producer {
     _pAC = 1
 }
 
-makeBank = Bank {
+makeBank i = Bank {
+    _bID = i,
     _bCash = 10.0,
-    _bMarkUp = (*0.1), -- check this!
+    _bMarkUp = (*0.05), -- check this!
     _bDebt = 0
 }
 
@@ -93,14 +101,17 @@ makeBank = Bank {
 class Firm a where
     isSolvent :: a -> Bool
     makeEntrant :: a -> a
+    idLens :: Lens' a Int
 
 instance Firm Producer where
     isSolvent a = isNothing (a^.pDebt)
-    makeEntrant a = a&pWorkers .~ [] 
+    makeEntrant a = a&pWorkers .~ []
+    idLens = pID
 
 instance Firm Bank where
     isSolvent a = (a^.bCash) >= 0
     makeEntrant = id
+    idLens = bID
 
 
 
