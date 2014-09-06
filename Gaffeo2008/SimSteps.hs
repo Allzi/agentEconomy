@@ -1,7 +1,7 @@
 module SimSteps where
 import Control.Lens
 import Control.Monad.State
-import qualified Data.IntMap as Map
+import qualified Data.IntMap.Strict as Map
 import Data.List
 import Data.Function
 import Debug.Trace
@@ -139,7 +139,7 @@ sendOffers p = do
     let all = (p^.pWorkers) ++ (fmap (\a -> (a, p^.pEntrantWage)) shuffled)
         receirvers = take (p^.pLDemand) all
     mapM_ send receirvers
-    return p
+    return $ p&pWorkers .~ []
   where
     pid = p^.pID
     send (wid, wage) = do
@@ -157,6 +157,7 @@ signContract w = do
     sign :: Maybe (Pid, Money) -> Simulation Worker
     sign (Just (pid, wage)) = do
         producers.ix pid.pWorkers %= ((w^.wID, wage):)
+        producers.ix pid.pCash -= wage
         return $ w&wIncome .~ wage
                   &wEmployer .~ Just pid
     sign Nothing = do
@@ -303,7 +304,7 @@ consume wid = do
                             let p' = p & pGoods .~ Just (w - demand/price)
                                        & pCash +~ demand
                                        & pNomSales +~ demand 
-                            producers . ix pid .= p
+                            producers . ix pid .= p'
                             aRSales += demand/price
                             return (0, (pid, pSize):shops)
                 else return (demand, shops)

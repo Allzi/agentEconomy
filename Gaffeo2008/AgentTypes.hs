@@ -1,7 +1,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 module AgentTypes where
 import Control.Lens
-import qualified Data.IntMap as Map
+import qualified Data.IntMap.Strict as Map
 import Data.Maybe
 
 type Wid = Int
@@ -15,41 +15,41 @@ type Stuff = Double
 
 
 data Worker = Worker {
-    _wID :: Wid,
+    _wID :: !Wid,
     _wEmployer :: Maybe Pid,
     _wOffers :: [(Pid, Money)],
-    _wIncome :: Money,
-    _wSavings :: Money,
+    _wIncome :: !Money,
+    _wSavings :: !Money,
     _wShop :: Maybe Pid
 }
 
 data Producer = Producer {
-    _pID :: Pid,
+    _pID :: !Pid,
     --Plans
-    _pQuantity :: Stuff,
-    _pPrice :: Money,
-    _pAC :: Money,
+    _pQuantity :: !Stuff,
+    _pPrice :: !Money,
+    _pAC :: !Money,
     --Labor
     _pWorkers :: [(Wid, Money)],
     _pApplicants :: [Wid],
-    _pLDemand :: Int,
-    _pEntrantWage :: Money,
+    _pLDemand :: !Int,
+    _pEntrantWage :: !Money,
     --Production
-    _pProductivity :: Double,
+    _pProductivity :: !Double,
     _pGoods :: Maybe Stuff,
     --Financial
-    _pCash :: Money,
-    _pClosing :: Money,
-    _pProfit :: Money,
-    _pNomSales :: Money,
+    _pCash :: !Money,
+    _pClosing :: !Money,
+    _pProfit :: !Money,
+    _pNomSales :: !Money,
     _pDebt :: Maybe (Bid, Money)
 }
 
 data Bank = Bank {
-    _bID :: Bid,
-    _bCash :: Money,
+    _bID :: !Bid,
+    _bCash :: !Money,
     _bMarkUp :: Double -> Double,
-    _bDebt :: Money
+    _bDebt :: !Money
 }
 
 makeLenses ''Worker
@@ -91,7 +91,7 @@ makeProducer i = Producer {
 makeBank i = Bank {
     _bID = i,
     _bCash = 10.0,
-    _bMarkUp = (*0.05), -- check this!
+    _bMarkUp = (*0.01), -- check this!
     _bDebt = 0
 }
 

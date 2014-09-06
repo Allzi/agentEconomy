@@ -3,6 +3,7 @@ module Simulation where
 import Control.Lens
 import Control.Monad.State
 import System.Random
+import qualified Data.IntMap.Strict as Map
 
 import AgentTypes
 import Debug.Trace
@@ -70,12 +71,23 @@ startSim = SimState {
     bids = [0..(bankN-1)]
 
 collectData :: Simulation SimData
-collectData =  do    
+collectData =  do
+    ps <- use producers
+    ws <- use workers
+    bs <- use banks
+    let mp = Map.foldl' (\acc a -> acc + a^.pCash) 0 ps
+        mw = Map.foldl' (\acc a -> acc + a^.wSavings) 0 ws
+        mb = Map.foldl' (\acc a -> acc + a^.bCash) 0 bs
+        ma = mb + mw + mp
     pl <- use priceLevel
     rs <- use aRSales
     return [("log_price_level", log pl),
            ("price_level", pl),
-           ("gdp", rs)]
+           ("gdp", rs),
+           ("money_workers", mw),
+           ("money_producers", mp),
+           ("money_banks", mb),
+           ("aggraget_money", ma)]
 
 randSim :: ([Double] -> ([Double], a)) -> Simulation a
 randSim randFunc = do
