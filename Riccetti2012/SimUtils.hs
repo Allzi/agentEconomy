@@ -1,7 +1,10 @@
+{-# LANGUAGE TemplateHaskell #-}
 module SimUtils where
 import Data.List
 import Data.Function
 import Control.Monad.State
+
+type SimData = [(String, Double)]
 
 --------------Simulation with random-------------------
 
@@ -36,12 +39,12 @@ shuffle l n =
 
 data Seller = Seller {
     sellerId :: Int,
-    ask ::  Double
+    askPrice ::  Double
     } deriving Eq
 
 data Buyer = Buyer {
     buyerId :: Int,
-    bid :: Double
+    bidPrice :: Double
     } deriving Eq
 
 type Matcher s = Seller -> Buyer -> s (Seller, Buyer)
@@ -61,23 +64,25 @@ marketLoop trials f sups dems = do
         else if (smallAsk ss) > (bigBid ds)
             then True
             else False
-    smallAsk ss = ask $ minimumBy (compare `on` ask) ss
-    bigBid ds   = bid $ maximumBy (compare `on` bid) ds
+    smallAsk ss = askPrice $ minimumBy (compare `on` askPrice) ss
+    bigBid ds   = bidPrice $ maximumBy (compare `on` bidPrice) ds
 
 
 tryMatch :: RSim s => Int -> Matcher s -> ([Seller], [Buyer]) -> 
             Buyer -> s ([Seller], [Buyer])
-tryMatch trials f (sups, ds) d = do
+tryMatch trials f (sups, ds) d = if null sups
+  then return (sups, d:ds)
+  else do
     -- take random suppliers
     rSups <- randSim $ (\rs -> randIds rs sups (length sups) trials)
     -- choose cheapest offer and match
-    let best = minimumBy (compare `on` ask) rSups
+    let best = minimumBy (compare `on` askPrice) rSups
     (s', d') <- f best d
     -- filter out exhausted demand/supply (no ask or pid)
-    let newSups = if (ask s' == 0)
+    let newSups = if (askPrice s' == 0)
             then deleteBy ((==) `on` sellerId) s' sups
             else s':(deleteBy ((==) `on` sellerId) s' sups)
-        newDs = if (bid d' == 0)
+        newDs = if (bidPrice d' == 0)
             then ds
             else d':ds
     return (newSups, newDs)

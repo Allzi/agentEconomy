@@ -19,13 +19,16 @@ laborTrials     = 100
 creditTrials    = 2
 duration        = 1000
 
-levAdj :: Double
-levAdj = 0.05
+genericAdj, inventoryTreshold, riskPremium, productivity, reg1, reg2, reg3 :: Double
+genericAdj = 0.05
 inventoryTreshold = 0.1
+riskPremium = 2
+productivity = 3
+reg1 = 10
+reg2 = 0.5
+reg3 = 0.1
 
 type Simulation = State SimState
-
-type SimData = [(String, Double)]
 
 data SimState = SimState {
     _workers     :: WorkerMap,
@@ -35,7 +38,8 @@ data SimState = SimState {
     _banks       :: BankMap,
     _bankIds     :: [Bid],
     _sRandoms    :: [Double],
-    _timer       :: Int
+    _timer       :: Int,
+    _cbInterest  :: Double
     }
 
 makeLenses ''SimState
@@ -48,7 +52,8 @@ startSim = SimState {
     _banks = makeMapWith bids makeBank,
     _bankIds = bids,
     _sRandoms = rands,
-    _timer = 0
+    _timer = 0,
+    _cbInterest = 0.02
     } 
   where 
     rands = randoms (mkStdGen seed)
@@ -75,6 +80,12 @@ mapMp f = do
     ps <- use producers
     ps' <- mapMOf traverse f ps
     producers .= ps'
+
+mapMb :: (Bank -> Simulation Bank) -> Simulation ()
+mapMb f = do
+    bs <- use banks
+    bs' <- mapMOf traverse f bs
+    banks .= bs'
 
 
     

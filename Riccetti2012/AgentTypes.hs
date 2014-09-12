@@ -19,19 +19,29 @@ data Worker = Worker {
 }
 
 data Producer = Producer {
-    _pID :: Pid,
+    _pID            :: Pid,
     --Finance
-    _pNetWorth :: Money,
-    _pLevTarg :: Double,
-    _pProfit :: Money,
-    _pDebt  :: Money,
+    _pNetWorth      :: Money,
+    _pLevTarg       :: Double,
+    _pDebtDemand    :: Money,
+    _pInterest      :: Double,
+    _pProfit        :: Money,
+    _pDebts         :: [(Bid, Money, Double)],
+    _pDebt          :: Money,
     --Goods
-    _pProduction :: Stuff,
-    _pInventory :: Stuff
+    _pProduction    :: Stuff,
+    _pInventory     :: Stuff
 }
 
 data Bank = Bank {
-    _bID :: Bid
+    _bID            :: Bid,
+    _bMaxCredit     :: Money,
+    _bInterest      :: Double,
+    _bUnlendedFunds :: Money,
+    _bNetWorth      :: Money,
+    _bDebt          :: Money,
+    _bCBCredit      :: Money,
+    _bDeposits      :: Money
 }
 
 makeLenses ''Worker
@@ -51,8 +61,11 @@ makeProducer i = Producer {
     _pID = i,
     --Finance
     _pNetWorth = 10,
-    _pLevTarg = 2,
+    _pLevTarg = 1,
+    _pDebtDemand = 0, -- derived from leverage target
+    _pInterest = 0.01,
     _pProfit = 0,
+    _pDebts = [],
     _pDebt = 0,
     --Goods
     _pProduction = 12,
@@ -60,5 +73,12 @@ makeProducer i = Producer {
 }
 
 makeBank i = Bank {
-    _bID = i
+    _bID = i,
+    _bMaxCredit = 0, --derived later
+    _bUnlendedFunds = 0,
+    _bInterest = 0.01,
+    _bNetWorth = 10,
+    _bDebt = 0,
+    _bCBCredit = 1,
+    _bDeposits = 0
 }
