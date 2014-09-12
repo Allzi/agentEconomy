@@ -1,8 +1,10 @@
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TemplateHaskell, FlexibleContexts, RankNTypes #-}
 module SimUtils where
 import Data.List
 import Data.Function
 import Control.Monad.State
+import Control.Lens
+import qualified Data.IntMap as M
 
 type SimData = [(String, Double)]
 
@@ -47,18 +49,25 @@ data Buyer = Buyer {
     bidPrice :: Double
     } deriving Eq
 
-type Matcher s = Seller -> Buyer -> s (Seller, Buyer)
+type Matcher s a b = a -> b -> s (a, b)
 
-marketLoop :: RSim s => Int -> Matcher s -> [Seller] -> [Buyer] -> s ()
-marketLoop trials f sups dems = do
-    -- random order
-    shuffled <- shuffle dems (length dems)
-    -- round of matching
-    (sups', dems') <- foldM (tryMatch trials f) (sups, []) shuffled
-    -- check if there are possible matches left
-    unless (shouldStop sups' dems') $
-        marketLoop trials f sups' dems'
+runMarket :: RSim (State s) => 
+            Int -> Matcher (State s) a b -> 
+            Lens' s (M.IntMap a) -> (a -> Maybe Seller) -> --supply
+            Lens' s (M.IntMap b) -> (b -> Maybe Buyer) -> --demand
+            State s ()
+runMarket trials match suppliers getS demanders getB = do
+    sups <- use suppliers
+    dems <- use demanders
+    let sellers = M.foldl mayFolder [] (fmap getS sups)
+        buyers = M.foldl mayFolder [] (fmap getB dems)
+    loop sellers buyers
   where
+    loop sellers buyers = do
+        shuffled <- shuffle buyers (length buyers)
+        (sellers', buyers') <- foldM tryMatch (sellers, []) shuffled
+        unless (shouldStop sellers' buyers') $ 
+            loop sellers' buyers'
     shouldStop ss ds = if (null ss) || (null ds)
         then True 
         else if (smallAsk ss) > (bigBid ds)
@@ -67,22 +76,28 @@ marketLoop trials f sups dems = do
     smallAsk ss = askPrice $ minimumBy (compare `on` askPrice) ss
     bigBid ds   = bidPrice $ maximumBy (compare `on` bidPrice) ds
 
-
-tryMatch :: RSim s => Int -> Matcher s -> ([Seller], [Buyer]) -> 
-            Buyer -> s ([Seller], [Buyer])
-tryMatch trials f (sups, ds) d = if null sups
-  then return (sups, d:ds)
-  else do
-    -- take random suppliers
-    rSups <- randSim $ (\rs -> randIds rs sups (length sups) trials)
-    -- choose cheapest offer and match
-    let best = minimumBy (compare `on` askPrice) rSups
-    (s', d') <- f best d
-    -- filter out exhausted demand/supply (no ask or pid)
-    let newSups = if (askPrice s' == 0)
-            then deleteBy ((==) `on` sellerId) s' sups
-            else s':(deleteBy ((==) `on` sellerId) s' sups)
-        newDs = if (bidPrice d' == 0)
-            then ds
-            else d':ds
-    return (newSups, newDs)
+    tryMatch (sellers, buyers) b = if null sellers
+        then return (sellers, b:buyers)
+        else do
+            -- take random suppliers
+            rSellers <- randSim $ (\rs -> randIds rs sellers (length sellers) trials)
+            -- choose cheapest offer and match
+            let best = minimumBy (compare `on` askPrice) rSellers
+            Just d <- use $ demanders.at (buyerId b)
+            Just s <- use $ suppliers.at (sellerId best)
+            (s', d') <- match s d
+            demanders.ix (buyerId b) .= d'
+            suppliers.ix (sellerId best) .= s'
+            let dem = getB d'
+                sup = getS s'
+            -- filter out exhausted demand/supply (no ask or pid)
+            let newSups = case sup of
+                    Nothing -> deleteBy ((==) `on` sellerId) best sellers
+                    Just sup' -> sup':(deleteBy ((==) `on` sellerId) best sellers)
+                newDs = case dem of
+                    Nothing -> buyers
+                    Just dem' -> dem':buyers
+            return (newSups, newDs)
+    mayFolder acc mb = case mb of
+        Nothing -> acc
+        Just b -> b:acc

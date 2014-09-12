@@ -19,7 +19,8 @@ import SimUtils
 
 simStep :: Simulation SimData
 simStep = do
-    creditStep    
+    creditStep
+    mapMw updateWage
 --    governmentStep
 --    labourStep
 --    productionStep
@@ -72,48 +73,47 @@ debtSupply b (r:rs) = (rs, b')
     
 creditMarket :: Simulation ()
 creditMarket = do
-    ps <- use producers
-    bs <- use banks
-    let buyers = fmap getDemand $ Map.elems ps
-        sellers = fmap getSupply $ Map.elems bs
-    marketLoop creditTrials creditMatch sellers buyers
+    runMarket creditTrials creditMatch banks getSeller producers getBuyer
   where
-    getDemand :: Producer -> Buyer
-    getDemand p = Buyer (p^.pID) (10000) -- no real limit to interest
-    getSupply :: Bank -> Seller
-    getSupply b = Seller (b^.bID) (b^.bInterest)
+    getBuyer :: Producer -> Maybe Buyer
+    getBuyer p = if (p^.pDebtDemand) == 0
+        then Nothing
+        else Just (Buyer (p^.pID) (10000)) -- no real limit to interest
+    getSeller :: Bank -> Maybe Seller
+    getSeller b = if (b^.bUnlendedFunds) == 0
+        then Nothing
+        else Just (Seller (b^.bID) (b^.bInterest))
     
-creditMatch :: Seller -> Buyer -> Simulation (Seller, Buyer)
-creditMatch seller buyer = do
-    let pid = buyerId buyer
-        bid = sellerId seller
-    -- get p and b
-    Just p <- use $ producers.at pid
-    Just b <- use $ banks.at bid
+creditMatch :: Bank -> Producer -> Simulation (Bank, Producer)
+creditMatch b p = do
     cbi <- use cbInterest
     -- determine loan size and interest
     let bConstr = min (b^.bUnlendedFunds) (b^.bMaxCredit * reg3)
         loanSize = min (p^.pDebtDemand) bConstr
-        interest = (askPrice seller) + cbi + (riskPremium ** (p^.pLevTarg))/100
+        interest = b^.bInterest + cbi + (riskPremium ** (p^.pLevTarg))/100
     -- producer:
         -- gets the needed funds, or all the possible funds to get
         -- remembers the bank
     -- bank reduces unlended funds
-    let p' = p&pDebts %~ ((bid, loanSize, interest):)
+    let p' = p&pDebts %~ ((b^.bID, loanSize, interest):)
               &pDebt +~ loanSize
               &pDebtDemand -~ loanSize
         b' = b&bUnlendedFunds -~ loanSize
-        seller' = if (b'^.bUnlendedFunds) == 0
-            then Seller bid 0
-            else Seller bid (b^.bInterest)
-        buyer' = if (p'^.pDebtDemand) == 0
-            then Buyer pid 0
-            else Buyer pid 10000
-    producers.ix pid .= p'
-    banks.ix bid .= b'
-    return (seller', buyer')
-    
+    return (b', p')
+
+------------------Wage Step-------------------------
+-- No minimum wage now!!!!
+updateWage :: Worker -> Simulation Worker
+updateWage w = do
+    (r:rs) <- use sRandoms
+    sRandoms .= rs
+    if w^.wEmployed
+        then return (w&wWage      *~ (1+r*genericAdj)
+                      &wEmployed .~ False)
+        else return (w&wWage *~ (1-r*genericAdj))
+
 ------------------Government Step-------------------
+--Tax collection?
 --The Government hires public workers
 --Banks buy government securities
 --Central bank buys remaining securities
@@ -125,6 +125,23 @@ governmentStep = undefined
 
 labourStep :: Simulation ()
 labourStep = undefined
+
+
+labourMarket :: Simulation ()
+labourMarket = do
+    runMarket laborTrials hire workers getSeller producers getBuyer
+  where
+    getSeller w = if w^.wEmployed
+        then Nothing
+        else Just (Seller (w^.wID) (w^.wWage))
+    getBuyer p = undefined
+
+
+hire :: Matcher Simulation Worker Producer
+hire seller buyer = do
+    let seller' = undefined
+        buyer'  = undefined
+    return (seller', buyer')
 
 --------------------Production Step------------------
 

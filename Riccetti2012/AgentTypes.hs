@@ -15,7 +15,9 @@ type Stuff = Double
 
 
 data Worker = Worker {
-    _wID :: Wid
+    _wID            :: Wid,
+    _wWage          :: Money,
+    _wEmployed      :: Bool
 }
 
 data Producer = Producer {
@@ -44,19 +46,31 @@ data Bank = Bank {
     _bDeposits      :: Money
 }
 
+data Goverment = Goverment {
+    _gIncomeTax     :: Double,
+    _gWealthTax     :: Double,
+    _gWTaxTreshold  :: Money,
+    _pWorkerShare   :: Double
+       
+}
+
 makeLenses ''Worker
 makeLenses ''Producer
 makeLenses ''Bank
+makeLenses ''Goverment
 
 makeMapWith :: [Int] -> (Int -> a) -> Map.IntMap a
 makeMapWith ids a = Map.fromList $ fmap (\i -> (i, a i)) ids
 
+makeWorker :: Wid -> Worker
 makeWorker i = Worker {
-    _wID = i 
+    _wID = i,
+    _wWage = 2,
+    _wEmployed = False    
 }
 
 
-
+makeProducer :: Pid -> Producer
 makeProducer i = Producer {
     _pID = i,
     --Finance
@@ -72,6 +86,7 @@ makeProducer i = Producer {
     _pInventory = 10
 }
 
+makeBank :: Bid -> Bank
 makeBank i = Bank {
     _bID = i,
     _bMaxCredit = 0, --derived later
