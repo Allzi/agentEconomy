@@ -19,7 +19,8 @@ laborTrials     = 100
 creditTrials    = 2
 duration        = 1000
 
-genericAdj, inventoryTreshold, riskPremium, productivity, reg1, reg2, reg3 :: Double
+genericAdj, inventoryTreshold, riskPremium, productivity, 
+    reg1, reg2, reg3, incomeCons, wealthCons :: Double
 genericAdj = 0.05
 inventoryTreshold = 0.1
 riskPremium = 2
@@ -27,6 +28,8 @@ productivity = 3
 reg1 = 10
 reg2 = 0.5
 reg3 = 0.1
+incomeCons = 0.8
+wealthCons = 0.3
 
 type Simulation = State SimState
 
@@ -39,7 +42,9 @@ data SimState = SimState {
     _bankIds     :: [Bid],
     _sRandoms    :: [Double],
     _timer       :: Int,
-    _cbInterest  :: Double
+    _cbInterest  :: Double,
+    _avgPrice    :: Money,
+    _government   :: Government
     }
 
 makeLenses ''SimState
@@ -53,7 +58,9 @@ startSim = SimState {
     _bankIds = bids,
     _sRandoms = rands,
     _timer = 0,
-    _cbInterest = 0.02
+    _cbInterest = 0.02,
+    _avgPrice = 0,
+    _government = makeGovernment
     } 
   where 
     rands = randoms (mkStdGen seed)
