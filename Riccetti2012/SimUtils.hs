@@ -14,6 +14,12 @@ class Monad a => RSim a where
     setRandom :: [Double] -> a ()
     getRandom :: a [Double]
 
+get1Rand :: RSim s => s Double
+get1Rand = do
+    (r:rs) <- getRandom
+    setRandom rs
+    return r
+
 randSim :: RSim s => ([Double] -> ([Double], a)) -> s a
 randSim randFunc = do
     rs <- getRandom

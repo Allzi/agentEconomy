@@ -1,3 +1,4 @@
+{-# LANGUAGE TemplateHaskell #-}
 module SimSteps where
 import Control.Lens
 import Control.Monad.State
@@ -23,7 +24,6 @@ simStep = do
     mapMw updateWage
 --    governmentStep
 --    labourStep
---    productionStep
 --    consumptionStep
 --    savingStep    
 --    accountingStep
@@ -51,7 +51,7 @@ debtDemand p (r:rs) = (rs, p')
     netWorth = p^.pNetWorth
     interestRate = p^.pInterest
     isGoodInv = p^.pProfit > (p^.pNetWorth + p^.pDebt) * interestRate
-    lowInventory = p^.pInventory < inventoryTreshold * p^.pProduction
+    lowInventory = (fromIntegral (p^.pInventory)) < inventoryTreshold * (fromIntegral (p^.pProduction))
     targetMult = if (isGoodInv && lowInventory)
         then (1+r*genericAdj)
         else (1-r*genericAdj)
@@ -75,7 +75,7 @@ debtSupply b (r:rs) = (rs, b')
     
 creditMarket :: Simulation ()
 creditMarket = do
-    runMarket creditTrials creditMatch banks getSeller producers getBuyer
+    runMarket bankTrials creditMatch banks getSeller producers getBuyer
   where
     getBuyer :: Producer -> Maybe Buyer
     getBuyer p = if (p^.pDebtDemand) == 0
@@ -95,7 +95,6 @@ creditMatch b p = do
         p' = p&pDebts %~ ((b^.bID, loanSize, interest):)
               &pDebt +~ loanSize
               &pDebtDemand -~ loanSize
-              &pLiquity +~ loanSize
               &pInterest .~ (p^.pInterest*p^.pDebt + interest*loanSize) / (loanSize + p^.pDebt)
         b' = b&bUnlendedFunds -~ loanSize
     return (b', p')
@@ -105,11 +104,13 @@ creditMatch b p = do
 updateWage :: Worker -> Simulation Worker
 updateWage w = do
     (r:rs) <- use sRandoms
+    ap <- use avgPrice
     sRandoms .= rs
-    if w^.wEmployed
-        then return (w&wWage      *~ (1+r*genericAdj)
-                      &wEmployed .~ False)
-        else return (w&wWage *~ (1-r*genericAdj))
+    let wage = max ap $ if w^.wEmployed
+            then w^.wWage * (1+r*genericAdj)
+            else w^.wWage * (1-r*genericAdj)
+    return $ w&wWage .~ wage
+              &wEmployed .~ False
 
 ------------------Government Step-------------------
 --The Government hires public workers
@@ -138,7 +139,33 @@ hirePublic = do
         
 
 sellGovSecs :: Simulation ()
-sellGovSecs = undefined
+sellGovSecs = do
+    -- Decifit and supply of securities:
+    g <- use government
+    let deficit = g^.gIntToBanks + g^.gWageBill - g^.gTaxIncome + g^.gRescueCosts
+        newDebt = g^.gPubDebt + deficit
+    government . gPubDebt .= newDebt 
+    -- Sell to banks:
+    itb <- if newDebt > 0
+        then do
+            bs <- use banks
+            let totDemand = Map.foldl pdDemand 0 bs
+                demandSat = if totDemand == 0 
+                    then 1
+                    else min 1 (newDebt / totDemand)
+                banksShare = max 1 (totDemand/newDebt)
+            banks %= buyPubDebt demandSat
+            return (banksShare * newDebt * g^.gInterest) --CB buys rest
+        else
+            return 0
+    let g'= g&gIntToBanks .~ itb
+             &gPubDebt .~ newDebt
+    government .= g'
+  where
+    pdDemand acc b = undefined
+    buyPubDebt b = undefined
+    
+
 --------------------Labour Step----------------------
 
 labourStep :: Simulation ()
@@ -148,9 +175,10 @@ labourStep = do
   where
     prepare p = p&pWorkers .~ 0
                  &pWageBill .~ 0
+                 &pLiquity .~ (p^.pNetWorth + p^.pDebt)
 
 labourMarket :: Simulation ()
-labourMarket = runMarket laborTrials hire workers getSeller producers getBuyer
+labourMarket = runMarket workerTrials hire workers getSeller producers getBuyer
   where
     getSeller w = if w^.wEmployed
         then Nothing
@@ -166,40 +194,49 @@ hire w p = return (w', p')
           &pWageBill +~ (w^.wWage)
           &pWorkers +~ 1
 
---------------------Production Step------------------
-productionStep :: Simulation ()
-productionStep = producers %= (fmap produce)
-  where
-    produce p = p&pProduction .~ (p^.pWorkers*productivity)
 
 --------------------Consumption Step-------------------
-
+-- Production and consumtion takes place here
+-- Issues:
+    -- Only wageBill is taken into account when calculating average cost
 
 consumptionStep :: Simulation ()
 consumptionStep = do
     mapMp (\p -> randSim (goodSupply p))
-    workers %= fmap goodDemand
+    mapMw goodDemand
     goodsMarket
 
 goodSupply :: Producer -> [Double] -> ([Double], Producer)
 goodSupply p (r:rs) = (rs, p')
   where
-    price = if p^.pInventory > 0
-        then p^.pPrice - genericAdj * r
-        else p^.pPrice + genericAdj * r
-    p' = p&pInventory +~ (p^.pProduction)
-          &pPrice     .~ price
+    production = p^.pWorkers * productivity
+    price = if (p^.pInventory == 0) && (production > 0)
+        then p^.pPrice + genericAdj * r
+        else p^.pPrice - genericAdj * r
+    avgCost = if production > 0
+        then p^.pWageBill/(fromIntegral production)
+        else 0
+    p' = p&pInventory +~ production
+          &pPrice     .~ (max avgCost price)
+          &pProduction .~ production
+          &pSales .~ 0
 
-goodDemand :: Worker -> Worker
-goodDemand w = w&wDemand .~ demand
-                &wConsBill .~ 0
+goodDemand :: Worker -> Simulation Worker
+goodDemand w = do
+    ap <- use avgPrice
+    let actual = if demand < ap
+        then min ap $ income + w^.wWealth
+        else demand
+    return $ w&wDemand .~ actual
+              &wConsBill .~ 0
   where
-    demand = if w^.wEmployed
-        then w^.wWage * incomeCons + w^.wWealth * wealthCons
-        else w^.wWealth * wealthCons
+    demand = income * incomeCons + w^.wWealth * wealthCons
+    income = if w^.wEmployed
+        then w^.wWage
+        else 0
 
 goodsMarket :: Simulation ()
-goodsMarket = runMarket consTrials goodsMatch producers getSeller workers getBuyer
+goodsMarket = runMarket producerTrials goodsMatch producers getSeller workers getBuyer
   where
     getSeller p = if p^.pInventory > 0
         then Just (Seller (p^.pID) (p^.pPrice))
@@ -209,26 +246,92 @@ goodsMarket = runMarket consTrials goodsMatch producers getSeller workers getBuy
 goodsMatch  :: Matcher Simulation Producer Worker
 goodsMatch p w = return (p', w')
   where
-    expenditure = undefined
-    p' = undefined
+    price = p^.pPrice
+    amount = min (floor ((w^.wDemand)/price)) (p^.pInventory)
+    expenditure = price * (fromIntegral amount)
+    p' = p&pInventory -~ amount
+          &pSales +~ expenditure
     w' = w&wDemand -~ expenditure
           &wConsBill +~ expenditure
 
 --------------------Saving Step-------------------------
 savingStep :: Simulation ()
-savingStep = undefined
+savingStep = do
+    mapMw (\w -> randSim (savingsSupply w))
+    mapMb (\b -> randSim (savingsDemand b))
+    depositMarket
 
+savingsSupply :: Worker -> [Double] -> ([Double], Worker)
+savingsSupply w (r:rs) = (rs, w')
+  where
+    w' = undefined
+    --minimum interest
+
+savingsDemand :: Bank -> [Double] -> ([Double], Bank)
+savingsDemand b (r:rs) = (rs, b')
+  where
+    b' = undefined
+    -- update bDepRate
+
+depositMarket :: Simulation ()
+depositMarket = runMarket workerTrials depositMatch workers getSeller banks getBuyer
+  where
+    getSeller w = undefined
+    getBuyer b = Just (Buyer (b^.bID) (b^.bDepRate))
+
+depositMatch :: Matcher Simulation Worker Bank
+depositMatch w b = return (w', b')
+  where
+    w' = undefined
+    b' = undefined
 
 --------------------Accounting Step----------------------
 --update Producers, Banks and Households (in this order)
 accountingStep :: Simulation ()
 accountingStep = do
+    aggDividends .= 0
     mapMp pAccount
     mapMb bAccount
+    -- Dividents!
     mapMw wAccount
 
 pAccount :: Producer -> Simulation Producer
-pAccount p = undefined
+pAccount p = do
+    -- gross profit
+    let oldProf = if p^.pProfit > 0
+            then 0
+            else p^.pProfit
+        prof = oldProf + p^.pSales - p^.pWageBill - p^.pInterest * p^.pDebt
+    -- Determine payout rate, calculate net profit
+    r <- get1Rand
+    let payOut = min 1 $ max 0 $ if (p^.pInventory == 0) && (p^.pProduction > 0)
+            then p^.pPayOutR * (1+r)
+            else p^.pPayOutR * (1-r)
+    netProf <- (payDividends payOut) =<< collectITax prof    
+    -- Net worth and solvency
+    let worth = p^.pNetWorth - netProf
+    nWorth <- collectWTax worth
+    let isSolvent = nWorth > 0
+    unless isSolvent (badDebts nWorth (p^.pDebts))
+    let p' = p&pPayOutR .~ payOut
+              &pProfit .~ prof
+              &pNetProfit .~ netProf
+              &pNetWorth .~ nWorth
+              &pIsSolvent .~ isSolvent
+    return p'
+
+badDebts :: Money -> [(Bid, Money, Double)] -> Simulation ()
+badDebts worth debts = do
+    when (null debts) $ error "no creditors"
+    let total = sum (fmap calcDebt debts)
+        ratio = 1 - (total+worth) / total 
+    mapM_ (creditLoss ratio) debts
+  where
+    calcDebt (_, d, i) = d*(1+i)
+    creditLoss ratio (bid, d, i) = do
+        let loss = ratio*d*(1+i)
+        banks . ix bid . bBadDebt += loss
+    
 
 bAccount :: Bank -> Simulation Bank
 bAccount b = undefined
@@ -258,14 +361,21 @@ collectWTax wealth = do
         else return wealth
 
 collectITax :: Money -> Simulation Money
-collectITax income = do
-    g <- use government
-    let t = g^.gIncomeTax
-        tax = income*t
-    government.gTaxIncome += tax
-    return $ income - tax
+collectITax income = if income > 0
+    then do
+        g <- use government
+        let t = g^.gIncomeTax
+            tax = income*t
+        government.gTaxIncome += tax
+        return $ income - tax
+    else return income
 
-
+payDividends :: Double -> Money -> Simulation Money
+payDividends rate prof = if prof > 0
+    then do
+        aggDividends += prof*rate
+        return (prof*(1-rate))
+    else return prof
 
 -------------------Solvency Step----------------------
 

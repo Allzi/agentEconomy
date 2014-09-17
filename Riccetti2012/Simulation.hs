@@ -9,22 +9,23 @@ import AgentTypes
 import Debug.Trace
 
 -- Parameters:
-seed, workerN, producerN, bankN, duration, consTrials, laborTrials, creditTrials :: Int
+seed, workerN, producerN, bankN, duration, producerTrials, workerTrials, 
+    bankTrials, productivity :: Int
 seed            = 1
 workerN         = 500
 producerN       = 80
 bankN           = 10
-consTrials      = 16
-laborTrials     = 100
-creditTrials    = 2
+producerTrials      = 16
+workerTrials     = 100
+bankTrials    = 2
 duration        = 1000
+productivity    = 3
 
-genericAdj, inventoryTreshold, riskPremium, productivity, 
+genericAdj, inventoryTreshold, riskPremium,
     reg1, reg2, reg3, incomeCons, wealthCons :: Double
 genericAdj = 0.05
 inventoryTreshold = 0.1
 riskPremium = 2
-productivity = 3
 reg1 = 10
 reg2 = 0.5
 reg3 = 0.1
@@ -44,6 +45,7 @@ data SimState = SimState {
     _timer       :: Int,
     _cbInterest  :: Double,
     _avgPrice    :: Money,
+    _aggDividends :: Money,
     _government   :: Government
     }
 
@@ -58,8 +60,9 @@ startSim = SimState {
     _bankIds = bids,
     _sRandoms = rands,
     _timer = 0,
-    _cbInterest = 0.02,
+    _cbInterest = 0.01,
     _avgPrice = 0,
+    _aggDividends = 0,
     _government = makeGovernment
     } 
   where 
