@@ -13,19 +13,27 @@ import AgentTypes
 import Simulation
 import SimUtils
 
-{--Remember:
+{-
+- Remember:
     - avgPrice must be calculated
     - minimum wage is to-do
+    - income streams of banks are not yet ready
+    - behavior income streams must be checked (something is forgotten for sure)
+    - dividends and bankruptcies are not yet done
+- Issues:
+    - interests on deposits are not paid on correct rounds atm
+    - CB money setting behavior is a big question
+    - market mechanism's imperfect information needs a fix
 -}
 
 simStep :: Simulation SimData
 simStep = do
     creditStep
     mapMw updateWage
---    governmentStep
---    labourStep
---    consumptionStep
---    savingStep    
+    governmentStep
+    labourStep
+    consumptionStep
+    savingStep    
 --    accountingStep
 --    solvencyStep
 
@@ -72,6 +80,7 @@ debtSupply b (r:rs) = (rs, b')
     b' = b&bMaxCredit       .~ supply
           &bUnlendedFunds   .~ supply
           &bInterest        .~ interest
+          &bPDDemand        .~ constraint2
     
 creditMarket :: Simulation ()
 creditMarket = do
@@ -97,6 +106,8 @@ creditMatch b p = do
               &pDebtDemand -~ loanSize
               &pInterest .~ (p^.pInterest*p^.pDebt + interest*loanSize) / (loanSize + p^.pDebt)
         b' = b&bUnlendedFunds -~ loanSize
+              &bLendIncome +~ loanSize * interest
+              &bPDDemand -~ loanSize
     return (b', p')
 
 ------------------Wage Step-------------------------
@@ -111,6 +122,7 @@ updateWage w = do
             else w^.wWage * (1-r*genericAdj)
     return $ w&wWage .~ wage
               &wEmployed .~ False
+              &wWageIncome .~ 0
 
 ------------------Government Step-------------------
 --The Government hires public workers
@@ -134,6 +146,7 @@ hirePublic = do
     hire g wid = do
         Just w <- use $ workers.at wid
         let w' = w&wEmployed .~ True
+                  &wWageIncome .~ (w^.wWage)
         workers.ix wid.= w'
         return $ g&gWageBill +~ (w^.wWage)
         
@@ -154,7 +167,7 @@ sellGovSecs = do
                     then 1
                     else min 1 (newDebt / totDemand)
                 banksShare = max 1 (totDemand/newDebt)
-            banks %= buyPubDebt demandSat
+            mapMb (buyPubDebt demandSat (g^.gInterest))
             return (banksShare * newDebt * g^.gInterest) --CB buys rest
         else
             return 0
@@ -162,9 +175,9 @@ sellGovSecs = do
              &gPubDebt .~ newDebt
     government .= g'
   where
-    pdDemand acc b = undefined
-    buyPubDebt b = undefined
-    
+    pdDemand acc b = acc + b^.bPDDemand
+    buyPubDebt amount i b = return $ b&bPDIncome .~ (b^.bPDDemand * amount * i)
+                                      &bPD .~ (b^.bPDDemand * amount)
 
 --------------------Labour Step----------------------
 
@@ -190,6 +203,7 @@ hire :: Matcher Simulation Worker Producer
 hire w p = return (w', p')
   where
     w' = w&wEmployed .~ True
+          &wWageIncome .~ (w^.wWage)
     p' = p&pLiquity -~ (w^.wWage)
           &pWageBill +~ (w^.wWage)
           &pWorkers +~ 1
@@ -225,15 +239,12 @@ goodDemand :: Worker -> Simulation Worker
 goodDemand w = do
     ap <- use avgPrice
     let actual = if demand < ap
-        then min ap $ income + w^.wWealth
+        then min ap $ w^.wWageIncome + w^.wWealth
         else demand
     return $ w&wDemand .~ actual
               &wConsBill .~ 0
   where
-    demand = income * incomeCons + w^.wWealth * wealthCons
-    income = if w^.wEmployed
-        then w^.wWage
-        else 0
+    demand = w^.wWageIncome * incomeCons + w^.wWealth * wealthCons
 
 goodsMarket :: Simulation ()
 goodsMarket = runMarket producerTrials goodsMatch producers getSeller workers getBuyer
@@ -257,33 +268,48 @@ goodsMatch p w = return (p', w')
 --------------------Saving Step-------------------------
 savingStep :: Simulation ()
 savingStep = do
+    cbint <- use cbInterest
     mapMw (\w -> randSim (savingsSupply w))
-    mapMb (\b -> randSim (savingsDemand b))
+    mapMb (\b -> randSim (savingsDemand cbint b))
     depositMarket
 
 savingsSupply :: Worker -> [Double] -> ([Double], Worker)
 savingsSupply w (r:rs) = (rs, w')
   where
-    w' = undefined
-    --minimum interest
+    minInterest = if w^.wInterest > 0 --if got a deal last time
+        then w^.wMinInterest * (1 + genericAdj * r) 
+        else w^.wMinInterest * (1 - genericAdj * r)
+    w' = w&wMinInterest .~ minInterest
+          &wInterest .~ 0
+          &wDepSupply .~ (w^.wWealth + w^.wWageIncome - w^.wConsBill)
 
-savingsDemand :: Bank -> [Double] -> ([Double], Bank)
-savingsDemand b (r:rs) = (rs, b')
+savingsDemand :: Double -> Bank -> [Double] -> ([Double], Bank)
+savingsDemand cbi b (r:rs) = (rs, b')
   where
-    b' = undefined
-    -- update bDepRate
+    depRate = if b^.bPDDemand > b^.bPD
+        then min cbi $ b^.bDepRate * (1 - genericAdj * r)
+        else b^.bDepRate * (1 + genericAdj *r)
+    b' = b&bDepRate .~ depRate
+          &bDeposits .~ 0
+          &bDepCost .~ 0
 
 depositMarket :: Simulation ()
 depositMarket = runMarket workerTrials depositMatch workers getSeller banks getBuyer
   where
-    getSeller w = undefined
+    getSeller w = if w^.wDepSupply > 0
+        then Just (Seller (w^.wID) (w^.wMinInterest))
+        else Nothing
     getBuyer b = Just (Buyer (b^.bID) (b^.bDepRate))
 
 depositMatch :: Matcher Simulation Worker Bank
 depositMatch w b = return (w', b')
   where
-    w' = undefined
-    b' = undefined
+    amount = w^.wDepSupply
+    cost = b^.bDepRate * amount
+    w' = w&wDepSupply .~ 0
+          &wInterest +~ cost
+    b' = b&bDeposits +~ amount
+          &bDepCost +~ cost
 
 --------------------Accounting Step----------------------
 --update Producers, Banks and Households (in this order)
@@ -334,15 +360,36 @@ badDebts worth debts = do
     
 
 bAccount :: Bank -> Simulation Bank
-bAccount b = undefined
+bAccount b = do
+    -- gross profit
+    let oldProf = if b^.bProfit > 0
+            then 0
+            else b^.bProfit
+        prof = oldProf + b^.bLendIncome + b^.bPDIncome 
+            - b^.bBadDebt - b^.bDepCost - b^.bCBCredCost
+    -- Determine payout rate, calculate net profit
+    r <- get1Rand
+    let payOut = min 1 $ max 0 $ if b^.bUnlendedFunds > 0 || b^.bMaxCredit == 0
+            then b^.bPayOutR * (1+r)
+            else b^.bPayOutR * (1-r)
+    netProf <- (payDividends payOut) =<< collectITax prof
+    -- Net worth and solvency
+    let worth = b^.bNetWorth - netProf
+    nWorth <- collectWTax worth
+    let isSolvent = nWorth > 0
+        b' = b&bPayOutR .~ payOut
+              &bProfit .~ prof
+              &bNetProfit .~ netProf
+              &bNetWorth .~ nWorth
+              &bIsSolvent .~ isSolvent
+    return b'
+
 
 wAccount :: Worker -> Simulation Worker
 wAccount w = do
-    wage <- if w^.wEmployed
-        then do
-            collectITax (w^.wWage)
-        else return 0
-    let grossW = w^.wWealth + wage + w^.wDividends + w^.wInterest - w^.wConsBill
+    netWage <- collectITax (w^.wWageIncome)
+      
+    let grossW = w^.wWealth + netWage + w^.wDividends + w^.wInterest - w^.wConsBill
     netW <- collectWTax grossW
     return $ w&wWealth .~ netW
 

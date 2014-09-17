@@ -17,12 +17,15 @@ type Stuff = Int
 data Worker = Worker {
     _wID            :: Wid,
     _wWage          :: Money,
+    _wWageIncome    :: Money,
     _wEmployed      :: Bool,
     _wWealth        :: Money,
     _wDividends     :: Money,
+    _wMinInterest   :: Double,
     _wInterest      :: Money,
     _wConsBill      :: Money,
-    _wDemand        :: Money
+    _wDemand        :: Money,
+    _wDepSupply     :: Money
 }
 
 data Producer = Producer {
@@ -52,13 +55,27 @@ data Producer = Producer {
 
 data Bank = Bank {
     _bID            :: Bid,
+    -- Financial:
+    _bNetWorth      :: Money,
+    _bProfit        :: Money,
+    _bNetProfit     :: Money,
+    _bPayOutR       :: Double,
+    _bIsSolvent     :: Bool,
+    -- Incomes and costs:
+    _bLendIncome    :: Money,
+    _bBadDebt       :: Money,
+    _bDepCost       :: Money,
+    _bCBCredCost    :: Money,
+    _bPDIncome      :: Money,
+    -- Lending out:
     _bMaxCredit     :: Money,
     _bInterest      :: Double,
     _bUnlendedFunds :: Money,
-    _bNetWorth      :: Money,
+    _bPDDemand      :: Money,
+    _bPD            :: Money,
+    -- Fund sources:
     _bCBCredit      :: Money,
     _bDeposits      :: Money,
-    _bBadDebt       :: Money,
     _bDepRate       :: Double
 }
 
@@ -92,11 +109,14 @@ makeWorker i = Worker {
     _wID        = i,
     _wWage      = 2,
     _wEmployed  = False,
+    _wWageIncome = 0,
     _wWealth    = 10,
     _wDividends = 0,
+    _wMinInterest = 0.01,
     _wInterest  = 0,
     _wConsBill  = 0,
-    _wDemand    = 0
+    _wDemand    = 0,
+    _wDepSupply = 0
 }
 
 
@@ -129,13 +149,27 @@ makeProducer i = Producer {
 makeBank :: Bid -> Bank
 makeBank i = Bank {
     _bID            = i,
-    _bMaxCredit     = 0, --derived later
-    _bUnlendedFunds = 0,
-    _bInterest      = 0.02,
+    -- Financial:
     _bNetWorth      = 10,
+    _bProfit        = 0,
+    _bNetProfit     = 0,
+    _bPayOutR       = 0.1,
+    _bIsSolvent     = True,
+    -- Incomes and costs:
+    _bLendIncome    = 0,
+    _bBadDebt       = 0,
+    _bDepCost       = 0,
+    _bCBCredCost    = 0,
+    _bPDIncome      = 0,
+    -- Lending out:
+    _bMaxCredit     = 0,
+    _bInterest      = 0.01,
+    _bUnlendedFunds = 0,
+    _bPDDemand      = 0,
+    _bPD            = 0,
+    -- Fund sources:
     _bCBCredit      = 1,
     _bDeposits      = 0,
-    _bBadDebt       = 0,
     _bDepRate       = 0.01
 }
 

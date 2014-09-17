@@ -82,11 +82,13 @@ runMarket trials match suppliers getS demanders getB = do
     smallAsk ss = askPrice $ minimumBy (compare `on` askPrice) ss
     bigBid ds   = bidPrice $ maximumBy (compare `on` bidPrice) ds
 
-    tryMatch (sellers, buyers) b = if null sellers
+    tryMatch (sellers, buyers) b =  do
+        let (filtered, _) = partition (\s -> (askPrice s) <= (bidPrice b)) sellers
+        if null filtered
         then return (sellers, b:buyers)
         else do
             -- take random suppliers
-            rSellers <- randSim $ (\rs -> randIds rs sellers (length sellers) trials)
+            rSellers <- randSim $ (\rs -> randIds rs filtered (length filtered) trials)
             -- choose cheapest offer and match
             let best = minimumBy (compare `on` askPrice) rSellers
             Just d <- use $ demanders.at (buyerId b)
