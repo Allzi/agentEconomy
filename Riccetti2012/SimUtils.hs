@@ -2,7 +2,7 @@
 module SimUtils where
 import Data.List
 import Data.Function
-import Control.Monad.State
+import Control.Monad.State.Strict
 import Control.Lens
 import qualified Data.IntMap as M
 
@@ -19,6 +19,13 @@ get1Rand = do
     (r:rs) <- getRandom
     setRandom rs
     return r
+
+sampleNormal :: RSim s => Double -> Double -> s Double
+sampleNormal a b = do
+    r1 <- get1Rand
+    r2 <- get1Rand
+    let x = (cos (2*pi*r1)) * sqrt (-2*(log r2)) 
+    return (a + b*x)
 
 randSim :: RSim s => ([Double] -> ([Double], a)) -> s a
 randSim randFunc = do
@@ -85,27 +92,27 @@ runMarket trials match suppliers getS demanders getB = do
     tryMatch (sellers, buyers) b =  do
         let (filtered, _) = partition (\s -> (askPrice s) <= (bidPrice b)) sellers
         if null filtered
-        then return (sellers, b:buyers)
-        else do
-            -- take random suppliers
-            rSellers <- randSim $ (\rs -> randIds rs filtered (length filtered) trials)
-            -- choose cheapest offer and match
-            let best = minimumBy (compare `on` askPrice) rSellers
-            Just d <- use $ demanders.at (buyerId b)
-            Just s <- use $ suppliers.at (sellerId best)
-            (s', d') <- match s d
-            demanders.ix (buyerId b) .= d'
-            suppliers.ix (sellerId best) .= s'
-            let dem = getB d'
-                sup = getS s'
-            -- filter out exhausted demand/supply (no ask or pid)
-            let newSups = case sup of
-                    Nothing -> deleteBy ((==) `on` sellerId) best sellers
-                    Just sup' -> sup':(deleteBy ((==) `on` sellerId) best sellers)
-                newDs = case dem of
-                    Nothing -> buyers
-                    Just dem' -> dem':buyers
-            return (newSups, newDs)
+            then return (sellers, b:buyers)
+            else do
+                -- take random suppliers
+                rSellers <- randSim $ (\rs -> randIds rs filtered (length filtered) trials)
+                -- choose cheapest offer and match
+                let best = minimumBy (compare `on` askPrice) rSellers
+                Just d <- use $ demanders.at (buyerId b)
+                Just s <- use $ suppliers.at (sellerId best)
+                (s', d') <- match s d
+                demanders.ix (buyerId b) .= d'
+                suppliers.ix (sellerId best) .= s'
+                let dem = getB d'
+                    sup = getS s'
+                -- filter out exhausted demand/supply (no ask or pid)
+                let newSups = case sup of
+                        Nothing -> deleteBy ((==) `on` sellerId) best sellers
+                        Just sup' -> sup':(deleteBy ((==) `on` sellerId) best sellers)
+                    newDs = case dem of
+                        Nothing -> buyers
+                        Just dem' -> dem':buyers
+                return (newSups, newDs)
     mayFolder acc mb = case mb of
         Nothing -> acc
         Just b -> b:acc

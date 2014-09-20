@@ -27,6 +27,6 @@ executable riccetti2012
   main-is:              Riccetti2012.hs
   other-extensions:     TemplateHaskell, FlexibleInstances
   build-depends:        base >=4.7 && <4.8, lens, mtl, containers, random,
-                        data-default-class, Chart, Chart-cairo, colour
+                        data-default-class, Chart, Chart-cairo, colour, directory
   hs-source-dirs:       ./Riccetti2012
   default-language:     Haskell2010

@@ -1,7 +1,8 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Main where
-import Control.Monad.State
+import Control.Monad.State.Strict
 import Control.Lens
+import System.Directory
 
 import Simulation
 import SimSteps
@@ -10,10 +11,12 @@ import SimUtils
 
 
 main = do
-   let sim = startSim
-   simData <- loop startSim
-   mapM printData simData
-   dataToCharts simData
+    let sim = startSim
+    simData <- loop startSim
+    mapM printData simData
+    createDirectoryIfMissing False "Output"
+    setCurrentDirectory "Output"
+    dataToCharts simData
 
 loop :: SimState -> IO ([SimData])
 loop sim =

@@ -1,7 +1,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 module SimSteps where
 import Control.Lens
-import Control.Monad.State
+import Control.Monad.State.Strict
 import qualified Data.IntMap as Map
 import Data.List
 import Data.Function
@@ -15,28 +15,26 @@ import SimUtils
 
 {-
 - Remember:
-    - avgPrice must be calculated
     - minimum wage is to-do
-    - income streams of banks are not yet ready
     - behavior income streams must be checked (something is forgotten for sure)
-    - dividends and bankruptcies are not yet done
 - Issues:
     - interests on deposits are not paid on correct rounds atm
-    - CB money setting behavior is a big question
-    - market mechanism's imperfect information needs a fix
+    - CB money setting behavior is a BIG question
+    - market mechanism's imperfect information needs a fix?
 -}
 
 simStep :: Simulation SimData
 simStep = do
+    t <- use timer
     creditStep
     mapMw updateWage
     governmentStep
     labourStep
     consumptionStep
     savingStep    
---    accountingStep
---    solvencyStep
-
+    accountingStep
+    solvencyStep
+    
     timer += 1
     -- Comes from Simulation.hs  
     collectData
@@ -49,9 +47,27 @@ simStep = do
 
 creditStep :: Simulation ()
 creditStep = do
+    cBActions
     mapMp (\p -> randSim (debtDemand p))
     mapMb (\b -> randSim (debtSupply b))
     creditMarket
+    
+cBActions :: Simulation ()
+cBActions = do
+    bs <- use banks
+    ps <- use producers
+    let exd = Map.foldl (\acc p -> acc + p^.pDebtDemand) 0 ps
+        exs = Map.foldl (\acc b -> acc + b^.bUnlendedFunds) 0 bs
+    r <- get1Rand
+    if exd > exs
+        then cbMoney*= (1+genericAdj*r)
+        else cbMoney*= (1-genericAdj*r)
+    cbc <- use cbMoney
+    cbi <- use cbInterest
+    let cred = cbc/(fromIntegral bankN)
+        cost = cred * cbi
+    banks %= fmap (\b -> b&bCBCredit   .~ cred
+                          &bCBCredCost .~ cost)
 
 debtDemand :: Producer -> [Double] -> ([Double], Producer)
 debtDemand p (r:rs) = (rs, p')
@@ -71,8 +87,8 @@ debtDemand p (r:rs) = (rs, p')
 debtSupply :: Bank -> [Double] -> ([Double], Bank)
 debtSupply b (r:rs) = (rs, b')
   where
-    constraint1 = reg1*b^.bNetWorth
-    constraint2 = reg2*b^.bNetWorth + b^.bDeposits + b^.bCBCredit
+    constraint1 = reg1 * b^.bNetWorth
+    constraint2 = reg2 * b^.bNetWorth + b^.bDeposits + b^.bCBCredit
     supply = min constraint1 constraint2
     interest = if (b^.bUnlendedFunds) == 0
         then (b^.bInterest)*(1+genericAdj*r)
@@ -140,7 +156,7 @@ hirePublic = do
     wids <- use workerIds
     let wn = floor ((fromIntegral workerN) * (g^.gWorkerShare))
     rids <- randSim (\rs -> randIds rs wids workerN wn)
-    g' <- foldM hire g rids
+    g' <- foldM hire (g&gWageBill.~0) rids
     government .= g'
   where
     hire g wid = do
@@ -157,7 +173,7 @@ sellGovSecs = do
     g <- use government
     let deficit = g^.gIntToBanks + g^.gWageBill - g^.gTaxIncome + g^.gRescueCosts
         newDebt = g^.gPubDebt + deficit
-    government . gPubDebt .= newDebt 
+    government . gPubDebt .= newDebt
     -- Sell to banks:
     itb <- if newDebt > 0
         then do
@@ -173,6 +189,8 @@ sellGovSecs = do
             return 0
     let g'= g&gIntToBanks .~ itb
              &gPubDebt .~ newDebt
+             &gWageBill .~ 0
+             &gRescueCosts .~ 0
     government .= g'
   where
     pdDemand acc b = acc + b^.bPDDemand
@@ -252,7 +270,9 @@ goodsMarket = runMarket producerTrials goodsMatch producers getSeller workers ge
     getSeller p = if p^.pInventory > 0
         then Just (Seller (p^.pID) (p^.pPrice))
         else Nothing
-    getBuyer w = Just (Buyer (w^.wID) (w^.wDemand))
+    getBuyer w = if w^.wDemand > 0
+        then Just (Buyer (w^.wID) (w^.wDemand))
+        else Nothing
 
 goodsMatch  :: Matcher Simulation Producer Worker
 goodsMatch p w = return (p', w')
@@ -313,12 +333,12 @@ depositMatch w b = return (w', b')
 
 --------------------Accounting Step----------------------
 --update Producers, Banks and Households (in this order)
+--no dividends!!
 accountingStep :: Simulation ()
 accountingStep = do
     aggDividends .= 0
     mapMp pAccount
     mapMb bAccount
-    -- Dividents!
     mapMw wAccount
 
 pAccount :: Producer -> Simulation Producer
@@ -335,7 +355,7 @@ pAccount p = do
             else p^.pPayOutR * (1-r)
     netProf <- (payDividends payOut) =<< collectITax prof    
     -- Net worth and solvency
-    let worth = p^.pNetWorth - netProf
+    let worth = p^.pNetWorth + netProf
     nWorth <- collectWTax worth
     let isSolvent = nWorth > 0
     unless isSolvent (badDebts nWorth (p^.pDebts))
@@ -374,7 +394,7 @@ bAccount b = do
             else b^.bPayOutR * (1-r)
     netProf <- (payDividends payOut) =<< collectITax prof
     -- Net worth and solvency
-    let worth = b^.bNetWorth - netProf
+    let worth = b^.bNetWorth + netProf
     nWorth <- collectWTax worth
     let isSolvent = nWorth > 0
         b' = b&bPayOutR .~ payOut
@@ -382,6 +402,7 @@ bAccount b = do
               &bNetProfit .~ netProf
               &bNetWorth .~ nWorth
               &bIsSolvent .~ isSolvent
+              &bBadDebt .~ 0
     return b'
 
 
@@ -389,7 +410,7 @@ wAccount :: Worker -> Simulation Worker
 wAccount w = do
     netWage <- collectITax (w^.wWageIncome)
       
-    let grossW = w^.wWealth + netWage + w^.wDividends + w^.wInterest - w^.wConsBill
+    let grossW = w^.wWealth + netWage + w^.wInterest - w^.wConsBill
     netW <- collectWTax grossW
     return $ w&wWealth .~ netW
 
@@ -427,5 +448,64 @@ payDividends rate prof = if prof > 0
 -------------------Solvency Step----------------------
 
 solvencyStep :: Simulation ()
-solvencyStep = undefined
+solvencyStep = do
+    pSolvency
+    bSolvency
+    distrDiv
+
+pSolvency :: Simulation ()
+pSolvency = do
+    ps <- use producers
+    let (solvents, exits) = Map.partition (\p -> p^.pIsSolvent) ps
+    avgPrice .= avgP solvents
+    entrants <- mapMOf traverse entrantFirm exits
+    producers .= (Map.union solvents entrants)
+  where
+    avgP ps = (Map.foldl (\acc p -> p^.pPrice+acc) 0 ps) / (fromIntegral (Map.size ps))
+
+entrantFirm :: Producer -> Simulation Producer
+entrantFirm p = do
+    nr <- sampleNormal 3 1
+    ap <- use avgPrice
+    let nw = (max 0.1 nr) * ap
+        e = makeProducer (p^.pID)
+    aggDividends -= nw
+    return $ e&pPrice .~ ap
+              &pNetWorth .~ nw
+
+bSolvency :: Simulation ()
+bSolvency = do
+    bs <- use banks
+    let (solvents, exits) = Map.partition (\b -> b^.bIsSolvent) bs
+    when (Map.null solvents) (error "no solvent banks!")
+    avgInterest .= avgI solvents
+    entrants <- mapMOf traverse entrantBank exits
+    banks .= (Map.union solvents entrants)
+  where
+    avgI bs = (Map.foldl (\acc b -> b^.bInterest+acc) 0 bs) / (fromIntegral (Map.size bs))
+
+
+entrantBank :: Bank -> Simulation Bank
+entrantBank b = do
+    nr <- sampleNormal 5 1
+    ap <- use avgPrice
+    ai <- use avgInterest
+    let nw = (max 0.2 nr) * ap
+        e = makeBank (b^.bID)
+    aggDividends -= nw
+    return $ e&bInterest .~ ai
+              &bNetWorth .~ nw
+
+distrDiv :: Simulation ()
+distrDiv = do
+    ws <- use workers
+    ds <- use aggDividends
+    let aggNw = Map.foldl (\acc w -> acc + w^.wWealth) 0 ws
+    if aggNw > (-ds)
+        then do
+            workers .= (fmap (\w -> w&wWealth *~ (aggNw+ds)/aggNw )ws)
+
+        else do
+            workers .= (fmap (\w -> w&wWealth .~ 0.01) ws)
+            government . gRescueCosts += ((-ds) - aggNw)
 

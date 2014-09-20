@@ -5,7 +5,7 @@ import Data.Colour
 import Data.Colour.Names
 import Data.Default.Class
 import Graphics.Rendering.Chart.Backend.Cairo
-import Control.Monad.State
+import Control.Monad.State.Strict
 import Control.Lens
 import Data.List
 
