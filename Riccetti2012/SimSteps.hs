@@ -50,7 +50,7 @@ creditStep = do
     cBActions
     mapMp (\p -> randSim (debtDemand p))
     mapMb (\b -> randSim (debtSupply b))
-    creditMarket
+    runMarket creditMarket
     
 cBActions :: Simulation ()
 cBActions = do
@@ -82,6 +82,7 @@ debtDemand p (r:rs) = (rs, p')
     p' = p&pLevTarg *~ targetMult
           &pDebtDemand .~ (targetMult * netWorth)
           &pDebt .~ 0
+          &pDebts .~ []
           &pInterest .~ 0
 
 debtSupply :: Bank -> [Double] -> ([Double], Bank)
@@ -98,14 +99,21 @@ debtSupply b (r:rs) = (rs, b')
           &bInterest        .~ interest
           &bPDDemand        .~ constraint2
     
-creditMarket :: Simulation ()
-creditMarket = do
-    runMarket bankTrials creditMatch banks getSeller producers getBuyer
+creditMarket :: Market SimState Bank Producer
+creditMarket = Market {
+    _mTrials    = bankTrials,
+    _mMatcher   = creditMatch,
+    _mSuppliers = banks,
+    _mGetSeller = getSeller,
+    _mDemanders = producers,
+    _mGetBuyer  = getBuyer
+    }
   where
     getBuyer :: Producer -> Maybe Buyer
     getBuyer p = if (p^.pDebtDemand) == 0
         then Nothing
         else Just (Buyer (p^.pID) (10000)) -- no real limit to interest
+    
     getSeller :: Bank -> Maybe Seller
     getSeller b = if (b^.bUnlendedFunds) == 0
         then Nothing
@@ -202,14 +210,21 @@ sellGovSecs = do
 labourStep :: Simulation ()
 labourStep = do
     producers %= (fmap prepare)
-    labourMarket
+    runMarket labourMarket
   where
     prepare p = p&pWorkers .~ 0
                  &pWageBill .~ 0
                  &pLiquity .~ (p^.pNetWorth + p^.pDebt)
 
-labourMarket :: Simulation ()
-labourMarket = runMarket workerTrials hire workers getSeller producers getBuyer
+labourMarket :: Market SimState Worker Producer
+labourMarket = Market {
+    _mTrials    = workerTrials,
+    _mMatcher   = hire,
+    _mSuppliers = workers,
+    _mGetSeller = getSeller,
+    _mDemanders = producers,
+    _mGetBuyer  = getBuyer
+    }
   where
     getSeller w = if w^.wEmployed
         then Nothing
@@ -236,15 +251,15 @@ consumptionStep :: Simulation ()
 consumptionStep = do
     mapMp (\p -> randSim (goodSupply p))
     mapMw goodDemand
-    goodsMarket
+    runMarket goodsMarket
 
 goodSupply :: Producer -> [Double] -> ([Double], Producer)
 goodSupply p (r:rs) = (rs, p')
   where
     production = p^.pWorkers * productivity
     price = if (p^.pInventory == 0) && (production > 0)
-        then p^.pPrice + genericAdj * r
-        else p^.pPrice - genericAdj * r
+        then p^.pPrice * (1 + genericAdj * r)
+        else p^.pPrice * (1 - genericAdj * r)
     avgCost = if production > 0
         then p^.pWageBill/(fromIntegral production)
         else 0
@@ -264,8 +279,15 @@ goodDemand w = do
   where
     demand = w^.wWageIncome * incomeCons + w^.wWealth * wealthCons
 
-goodsMarket :: Simulation ()
-goodsMarket = runMarket producerTrials goodsMatch producers getSeller workers getBuyer
+goodsMarket :: Market SimState Producer Worker
+goodsMarket = Market {
+    _mTrials    = producerTrials,
+    _mMatcher   = goodsMatch,
+    _mSuppliers = producers,
+    _mGetSeller = getSeller,
+    _mDemanders = workers,
+    _mGetBuyer  = getBuyer
+    }
   where
     getSeller p = if p^.pInventory > 0
         then Just (Seller (p^.pID) (p^.pPrice))
@@ -291,7 +313,7 @@ savingStep = do
     cbint <- use cbInterest
     mapMw (\w -> randSim (savingsSupply w))
     mapMb (\b -> randSim (savingsDemand cbint b))
-    depositMarket
+    runMarket depositMarket
 
 savingsSupply :: Worker -> [Double] -> ([Double], Worker)
 savingsSupply w (r:rs) = (rs, w')
@@ -313,8 +335,15 @@ savingsDemand cbi b (r:rs) = (rs, b')
           &bDeposits .~ 0
           &bDepCost .~ 0
 
-depositMarket :: Simulation ()
-depositMarket = runMarket workerTrials depositMatch workers getSeller banks getBuyer
+depositMarket :: Market SimState Worker Bank
+depositMarket = Market {
+    _mTrials    = workerTrials,
+    _mMatcher   = depositMatch,
+    _mSuppliers = workers,
+    _mGetSeller = getSeller,
+    _mDemanders = banks,
+    _mGetBuyer  = getBuyer
+    }
   where
     getSeller w = if w^.wDepSupply > 0
         then Just (Seller (w^.wID) (w^.wMinInterest))

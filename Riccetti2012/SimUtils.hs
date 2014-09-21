@@ -64,30 +64,45 @@ data Buyer = Buyer {
 
 type Matcher s a b = a -> b -> s (a, b)
 
-runMarket :: RSim (State s) => 
-            Int -> Matcher (State s) a b -> 
-            Lens' s (M.IntMap a) -> (a -> Maybe Seller) -> --supply
-            Lens' s (M.IntMap b) -> (b -> Maybe Buyer) -> --demand
-            State s ()
-runMarket trials match suppliers getS demanders getB = do
-    sups <- use suppliers
-    dems <- use demanders
+data Market s a b = Market {
+    _mTrials    :: Int,
+    _mMatcher   :: Matcher (State s) a b,
+    _mSuppliers :: ALens' s (M.IntMap a),
+    _mGetSeller :: a -> Maybe Seller,
+    _mDemanders :: ALens' s (M.IntMap b),
+    _mGetBuyer  :: b -> Maybe Buyer
+}
+
+makeLenses ''Market
+
+runMarket :: RSim (State s) => Market s a b -> State s ()
+runMarket m = do
+    sups <- use (cloneLens (m^.mSuppliers))
+    dems <- use (cloneLens (m^.mDemanders))
     let sellers = M.foldl mayFolder [] (fmap getS sups)
         buyers = M.foldl mayFolder [] (fmap getB dems)
-    loop sellers buyers
+    marketLoop m sellers buyers
   where
-    loop sellers buyers = do
-        shuffled <- shuffle buyers (length buyers)
-        (sellers', buyers') <- foldM tryMatch (sellers, []) shuffled
-        unless (shouldStop sellers' buyers') $ 
-            loop sellers' buyers'
-    shouldStop ss ds = if (null ss) || (null ds)
-        then True 
-        else if (smallAsk ss) > (bigBid ds)
-            then True
-            else False
-    smallAsk ss = askPrice $ minimumBy (compare `on` askPrice) ss
-    bigBid ds   = bidPrice $ maximumBy (compare `on` bidPrice) ds
+    getS = m^.mGetSeller
+    getB = m^.mGetBuyer
+    mayFolder acc mb = case mb of
+        Nothing -> acc
+        Just b -> b:acc
+
+marketLoop :: RSim (State s) => Market s a b -> 
+    [Seller] -> [Buyer] -> State s ()
+marketLoop m sellers buyers = do 
+    shuffled <- shuffle buyers (length buyers)
+    (sellers', buyers') <- foldM tryMatch (sellers, []) shuffled
+    unless (shouldStop sellers' buyers') $ 
+        marketLoop m sellers' buyers'
+  where
+    trials      = m^.mTrials
+    match       = m^.mMatcher
+    suppliers   = m^.mSuppliers
+    getS        = m^.mGetSeller
+    demanders   = m^.mDemanders
+    getB        = m^.mGetBuyer
 
     tryMatch (sellers, buyers) b =  do
         let (filtered, _) = partition (\s -> (askPrice s) <= (bidPrice b)) sellers
@@ -98,11 +113,11 @@ runMarket trials match suppliers getS demanders getB = do
                 rSellers <- randSim $ (\rs -> randIds rs filtered (length filtered) trials)
                 -- choose cheapest offer and match
                 let best = minimumBy (compare `on` askPrice) rSellers
-                Just d <- use $ demanders.at (buyerId b)
-                Just s <- use $ suppliers.at (sellerId best)
+                Just d <- use $ (cloneLens demanders).at (buyerId b)
+                Just s <- use $ (cloneLens suppliers).at (sellerId best)
                 (s', d') <- match s d
-                demanders.ix (buyerId b) .= d'
-                suppliers.ix (sellerId best) .= s'
+                (cloneLens demanders).ix (buyerId b) .= d'
+                (cloneLens suppliers).ix (sellerId best) .= s'
                 let dem = getB d'
                     sup = getS s'
                 -- filter out exhausted demand/supply (no ask or pid)
@@ -113,6 +128,15 @@ runMarket trials match suppliers getS demanders getB = do
                         Nothing -> buyers
                         Just dem' -> dem':buyers
                 return (newSups, newDs)
-    mayFolder acc mb = case mb of
-        Nothing -> acc
-        Just b -> b:acc
+
+    shouldStop ss ds = if (null ss) || (null ds)
+        then True 
+        else if (smallAsk ss) > (bigBid ds)
+            then True
+            else False
+      where
+        smallAsk ss = askPrice $ minimumBy (compare `on` askPrice) ss
+        bigBid ds   = bidPrice $ maximumBy (compare `on` bidPrice) ds
+
+
+

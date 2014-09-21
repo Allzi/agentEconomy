@@ -52,7 +52,7 @@ chart title ls = toRenderable layout
            $ def
 
 dataToChart :: (String, PDat) -> IO (PickFn ())
-dataToChart (n, d) = renderableToFile def (chart n d) (n++".png")
+dataToChart (n, d) = renderableToFile def (n ++ ".png") (chart n d) 
 
 dataToCharts :: [SimData] -> IO()
 dataToCharts sd = mapM_ dataToChart d

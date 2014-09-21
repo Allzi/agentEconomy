@@ -3,6 +3,8 @@ module Main where
 import Control.Monad.State.Strict
 import Control.Lens
 import System.Directory
+import Control.DeepSeq
+import System.Random
 
 import Simulation
 import SimSteps
@@ -11,8 +13,7 @@ import SimUtils
 
 
 main = do
-    let sim = startSim
-    simData <- loop startSim
+    simData <- loop $ startSim (randoms (mkStdGen seed))
     mapM printData simData
     createDirectoryIfMissing False "Output"
     setCurrentDirectory "Output"
@@ -23,7 +24,7 @@ loop sim =
     if (sim^.timer < duration) 
         then do
             let (dPoint, sim') = runState simStep sim
-            simData <- loop sim'
+            simData <- dPoint `deepseq` loop sim'
             return (dPoint:simData)
         else return []
 

@@ -15,85 +15,85 @@ type Stuff = Int
 
 
 data Worker = Worker {
-    _wID            :: Wid,
-    _wWage          :: Money,
-    _wWageIncome    :: Money,
-    _wEmployed      :: Bool,
-    _wWealth        :: Money,
-    _wDividends     :: Money,
-    _wMinInterest   :: Double,
-    _wInterest      :: Money,
-    _wConsBill      :: Money,
-    _wDemand        :: Money,
-    _wDepSupply     :: Money
+    _wID            :: !Wid,
+    _wWage          :: !Money,
+    _wWageIncome    :: !Money,
+    _wEmployed      :: !Bool,
+    _wWealth        :: !Money,
+    _wDividends     :: !Money,
+    _wMinInterest   :: !Double,
+    _wInterest      :: !Money,
+    _wConsBill      :: !Money,
+    _wDemand        :: !Money,
+    _wDepSupply     :: !Money
 }
 
 data Producer = Producer {
-    _pID            :: Pid,
+    _pID            :: !Pid,
     --Finance
-    _pNetWorth      :: Money,
-    _pLiquity       :: Money,
-    _pProfit        :: Money,
-    _pNetProfit     :: Money,
-    _pPayOutR       :: Double,
-    _pIsSolvent     :: Bool,
+    _pNetWorth      :: !Money,
+    _pLiquity       :: !Money,
+    _pProfit        :: !Money,
+    _pNetProfit     :: !Money,
+    _pPayOutR       :: !Double,
+    _pIsSolvent     :: !Bool,
     --Credit
-    _pLevTarg       :: Double,
-    _pDebtDemand    :: Money,
-    _pInterest      :: Double,
+    _pLevTarg       :: !Double,
+    _pDebtDemand    :: !Money,
+    _pInterest      :: !Double,
     _pDebts         :: [(Bid, Money, Double)],
-    _pDebt          :: Money,
+    _pDebt          :: !Money,
     --Goods
-    _pProduction    :: Stuff,
-    _pInventory     :: Stuff,
-    _pPrice         :: Money,
-    _pSales         :: Money,
+    _pProduction    :: !Stuff,
+    _pInventory     :: !Stuff,
+    _pPrice         :: !Money,
+    _pSales         :: !Money,
     --hiring
-    _pWorkers       :: Int,
-    _pWageBill      :: Money
+    _pWorkers       :: !Int,
+    _pWageBill      :: !Money
 }
 
 data Bank = Bank {
-    _bID            :: Bid,
+    _bID            :: !Bid,
     -- Financial:
-    _bNetWorth      :: Money,
-    _bProfit        :: Money,
-    _bNetProfit     :: Money,
-    _bPayOutR       :: Double,
-    _bIsSolvent     :: Bool,
+    _bNetWorth      :: !Money,
+    _bProfit        :: !Money,
+    _bNetProfit     :: !Money,
+    _bPayOutR       :: !Double,
+    _bIsSolvent     :: !Bool,
     -- Incomes and costs:
-    _bLendIncome    :: Money,
-    _bBadDebt       :: Money,
-    _bDepCost       :: Money,
-    _bCBCredCost    :: Money,
-    _bPDIncome      :: Money,
+    _bLendIncome    :: !Money,
+    _bBadDebt       :: !Money,
+    _bDepCost       :: !Money,
+    _bCBCredCost    :: !Money,
+    _bPDIncome      :: !Money,
     -- Lending out:
-    _bMaxCredit     :: Money,
-    _bInterest      :: Double,
-    _bUnlendedFunds :: Money,
-    _bPDDemand      :: Money,
-    _bPD            :: Money,
+    _bMaxCredit     :: !Money,
+    _bInterest      :: !Double,
+    _bUnlendedFunds :: !Money,
+    _bPDDemand      :: !Money,
+    _bPD            :: !Money,
     -- Fund sources:
-    _bCBCredit      :: Money,
-    _bDeposits      :: Money,
-    _bDepRate       :: Double
+    _bCBCredit      :: !Money,
+    _bDeposits      :: !Money,
+    _bDepRate       :: !Double
 }
 
 data Government = Government {
     --Tax rates:
-    _gIncomeTax     :: Double,
-    _gWealthTax     :: Double,
-    _gWTaxTreshold  :: Double,
+    _gIncomeTax     :: !Double,
+    _gWealthTax     :: !Double,
+    _gWTaxTreshold  :: !Double,
     --Incomes and costs:
-    _gTaxIncome     :: Money,
-    _gWageBill      :: Money,
-    _gRescueCosts   :: Money,
-    _gIntToBanks    :: Money,
+    _gTaxIncome     :: !Money,
+    _gWageBill      :: !Money,
+    _gRescueCosts   :: !Money,
+    _gIntToBanks    :: !Money,
     --Financial:
-    _gInterest      :: Double,
-    _gPubDebt       :: Money,
+    _gInterest      :: !Double,
+    _gPubDebt       :: !Money,
     --Misc.:
-    _gWorkerShare   :: Double
+    _gWorkerShare   :: !Double
 }
 
 makeLenses ''Worker

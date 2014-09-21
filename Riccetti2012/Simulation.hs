@@ -18,7 +18,7 @@ bankN           = 10
 producerTrials  = 16
 workerTrials    = 100
 bankTrials      = 2
-duration        = 1000
+duration        = 100
 productivity    = 3
 
 genericAdj, inventoryTreshold, riskPremium,
@@ -35,42 +35,38 @@ wealthCons          = 0.3
 type Simulation = State SimState
 
 data SimState = SimState {
-    _workers     :: WorkerMap,
-    _workerIds   :: [Wid],
-    _producers   :: ProducerMap,
-    _producerIds :: [Pid],
-    _banks       :: BankMap,
-    _bankIds     :: [Bid],
-    _sRandoms    :: [Double],
-    _timer       :: Int,
-    _cbInterest  :: Double,
-    _avgPrice    :: Money,
-    _avgInterest :: Money,
-    _aggDividends :: Money,
-    _cbMoney      :: Money,
-    _government   :: Government
+    _workers        :: !WorkerMap,
+    _workerIds      :: [Wid],
+    _producers      :: !ProducerMap,
+    _banks          :: !BankMap,
+    _sRandoms       :: [Double],
+    _timer          :: !Int,
+    _cbInterest     :: !Double,
+    _avgPrice       :: !Money,
+    _avgInterest    :: !Money,
+    _aggDividends   :: !Money,
+    _cbMoney        :: !Money,
+    _government     :: !Government
     }
 
 makeLenses ''SimState
 
-startSim = SimState {
-    _workers = makeMapWith wids makeWorker,
-    _workerIds = wids,
-    _producers = makeMapWith pids makeProducer,
-    _producerIds = pids,
-    _banks = makeMapWith bids makeBank,
-    _bankIds = bids,
-    _sRandoms = rands,
-    _timer = 0,
-    _cbInterest = 0.01,
-    _avgPrice = 1,
-    _avgInterest = 0.01,
-    _aggDividends = 0,
-    _cbMoney = 10,
-    _government = makeGovernment
+startSim :: [Double] -> SimState
+startSim rands = SimState {
+    _workers        = makeMapWith wids makeWorker,
+    _workerIds      = wids,
+    _producers      = makeMapWith pids makeProducer,
+    _banks          = makeMapWith bids makeBank,
+    _sRandoms       = rands,
+    _timer          = 0,
+    _cbInterest     = 0.01,
+    _avgPrice       = 1,
+    _avgInterest    = 0.01,
+    _aggDividends   = 0,
+    _cbMoney        = 10,
+    _government     = makeGovernment
     } 
   where 
-    rands = randoms (mkStdGen seed)
     wids = [0..(workerN-1)]
     pids = [0..(producerN-1)] 
     bids = [0..(bankN-1)]
