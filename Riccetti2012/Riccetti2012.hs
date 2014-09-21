@@ -15,6 +15,7 @@ import SimUtils
 main = do
     simData <- loop $ startSim (randoms (mkStdGen seed))
     mapM printData simData
+    
     createDirectoryIfMissing False "Output"
     setCurrentDirectory "Output"
     dataToCharts simData

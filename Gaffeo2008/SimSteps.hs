@@ -10,6 +10,7 @@ import Data.Maybe
 
 import AgentTypes
 import Simulation
+import SimUtils
 
 simStep :: Simulation SimData
 simStep = do
@@ -31,21 +32,6 @@ simplePStep f = do
     prs <- use producers
     newProducers <- randSim (\rs -> Map.mapAccum f rs prs)
     producers .= newProducers
-
---very slow random index taker
-randIds :: Eq a => [Double] -> [a] -> Int -> Int-> ([Double],[a])
-randIds rs _ _ 0 = (rs, [])
-randIds rs [] _ _ = (rs, [])
-randIds (r:rs) ids idNum toTake = (rs', i:ls)
-  where 
-    (rs', ls) = randIds rs ids' (idNum-1) (toTake-1)
-    rind = floor $ r*fromIntegral idNum
-    i = ids !! rind
-    ids' = delete i ids
-
-shuffle ::Eq a => [a]-> Int -> Simulation [a]
-shuffle l n =
-    randSim (\rs -> randIds rs l n n)
 
 ------------------New productivities---------------------
 devStep :: Simulation ()

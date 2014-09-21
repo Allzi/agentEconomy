@@ -1,10 +1,11 @@
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TemplateHaskell, TypeSynonymInstances, FlexibleInstances #-}
 module Simulation where
 import Control.Lens
 import Control.Monad.State
 import System.Random
 import qualified Data.IntMap.Strict as Map
 
+import SimUtils
 import AgentTypes
 import Debug.Trace
 
@@ -27,9 +28,6 @@ laborTrials     = 4     :: Int
 creditTrials    = 2     :: Int
 
 type Simulation = State SimState
-
-type SimData = [(String, Double)]
-
 
 data SimState = SimState {
     _workers     :: WorkerMap,
@@ -70,6 +68,10 @@ startSim = SimState {
     pids = [0..(producerN-1)] 
     bids = [0..(bankN-1)]
 
+instance RSim (State SimState) where
+    setRandom rs = sRandoms .= rs
+    getRandom = use sRandoms
+
 collectData :: Simulation SimData
 collectData =  do
     ps <- use producers
@@ -88,13 +90,6 @@ collectData =  do
            ("money_producers", mp),
            ("money_banks", mb),
            ("aggraget_money", ma)]
-
-randSim :: ([Double] -> ([Double], a)) -> Simulation a
-randSim randFunc = do
-    rs <- use sRandoms
-    let (rs', a) = randFunc rs
-    sRandoms .= rs'
-    return a
 
 mapMw :: (Worker -> Simulation Worker) -> Simulation ()
 mapMw f = do
