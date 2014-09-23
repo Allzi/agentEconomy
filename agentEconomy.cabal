@@ -15,7 +15,7 @@ build-type:          Simple
 -- extra-source-files:  
 cabal-version:       >=1.10
 
-executable gaffeo2008
+executable Gaffeo2008
   main-is:              Gaffeo2008.hs
   other-extensions:     TemplateHaskell
   build-depends:        base >=4.7 && <4.8, lens, mtl, containers, random,
@@ -24,11 +24,20 @@ executable gaffeo2008
   hs-source-dirs:       ./Gaffeo2008, ./Utils
   default-language:     Haskell2010
 
-executable riccetti2012
+executable Riccetti2012
   main-is:              Riccetti2012.hs
   other-extensions:     TemplateHaskell, FlexibleInstances
   build-depends:        base >=4.7 && <4.8, lens, mtl, containers, random,
                         data-default-class, Chart, Chart-cairo, colour, directory,
                         deepseq
   hs-source-dirs:       ./Riccetti2012, ./Utils
+  default-language:     Haskell2010
+
+executable Lengnick2013
+  main-is:              Lengnick2013.hs
+  other-extensions:     TemplateHaskell, FlexibleInstances
+  build-depends:        base >=4.7 && <4.8, lens, mtl, containers, random,
+                        data-default-class, Chart, Chart-cairo, colour, directory,
+                        deepseq, random-fu
+  hs-source-dirs:       ./Lengnick2013, ./Utils
   default-language:     Haskell2010
