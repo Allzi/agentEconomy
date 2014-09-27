@@ -11,6 +11,7 @@ import Data.Random
 import AgentTypes
 import Simulation
 import SimUtils
+import Month
 
 -- | Purely runs the simulation with a seed.
 simulateSeed :: Int -> [SimData]
