@@ -24,7 +24,7 @@ simulateSeed seed = dataList
 -- Used in simulateSeed.
 runSimulation :: [SimData] -> SimState -> RVar ([SimData])
 runSimulation sds sim =
-    if (sim^.timer < duration)
+    if (sim^.timer._1 < duration)
         then do
             (sd, sim') <- runStateT simStep sim
             runSimulation (sd:sds) sim'
@@ -33,7 +33,7 @@ runSimulation sds sim =
 -- | Runs one round of simulation step by step. 
 simStep :: Simulation SimData
 simStep = do
-    timer += 1
+    timer._1 += 1
     
     collectData
 

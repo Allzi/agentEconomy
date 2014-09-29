@@ -6,6 +6,7 @@ import Control.Lens
 import Control.Monad.State.Strict hiding (mapM_)
 import qualified Data.IntMap as Map
 import Data.Foldable
+import Data.Function
 import Data.List hiding (sum, foldl, any)
 import Control.Applicative
 import Debug.Trace
@@ -18,6 +19,10 @@ import Simulation
 import SimUtils
 import Day
 
+runMonths :: Simulation ()
+runMonths = do
+    timer._2 .~ 0
+    runMonth
 
 -- | Advances simulation by one month.
 -- TODO: add actual firing of employee
@@ -27,12 +32,16 @@ runMonth = do
     sellerSearch
     jobSearch
     consumptionPlans
-    -- day x21    
+    
+    runDays    
     
     -- End of month:
     -- accounting (wages, dividents)
     -- adjustReservation
+    timer._2 +~ 1
+    m <- use $ timer._2
 
+    while (m < 12) runMonth
 
 -- | In planStep all the firms prepare for next month.
 -- Offered wage rates are adjusted up if there are unfilled positions,
@@ -94,6 +103,7 @@ sellerSearch = do
     let sizedFids = fmap (\f -> fromIntegral (f^.fSize)) fs
         wSum = sum sizedFids
     households <$=> updateLinks sizedFids wSum
+    households %= fmap sortShops
   where  
     updateLinks :: Map.IntMap Double -> Double -> Household -> Simulation Household
     updateLinks sfs weightSum hous = updatePrices hous >>= pSearch >>= qSearch
@@ -146,6 +156,8 @@ sellerSearch = do
                 Just weight = Map.lookup fid s
         replaceShop :: Fid -> (Fid, Money) -> [(Fid, Money)] -> [(Fid, Money)]
         replaceShop fid nShop = traverse.filtered (( == fid) . fst) .~ nShop
+    sortShops :: Household -> Household
+    sortShops h = h&hShops %~ sortBy (compare `on` snd)
 
 
 -- | Job search is done in random order.
@@ -212,11 +224,12 @@ searchJ h = case h^.hEmployer of
 
 -- | Households plan consumption for incoming month according to their 
 -- real wealth.
+-- Daily demand is monthly / 21.
 consumptionPlans :: Simulation ()
 consumptionPlans = households %= fmap planConsumption
   where
     planConsumption :: Household -> Household
-    planConsumption h = h&hMonthlyDemand .~ demand
+    planConsumption h = h&hDDemand .~ (demand / fromIntegral daysInMonth)
       where
         avgP = (sum.fmap snd) (h^.hShops) / fromIntegral shopN
         realWealth = h^.hLiquity / avgP

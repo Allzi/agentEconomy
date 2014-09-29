@@ -38,7 +38,8 @@ shopN           = 7
 -- | MAGIC
 wageAdj, priceAdj, qSearchProb, pSearchProb, diffToReplace,
     iLowerBound, iUpperBound, pLowerBound, pUpperBound, 
-    productivity, unsatProb, satProb, consAlpha  :: Double
+    productivity, unsatProb, satProb, consAlpha, endShopTresh
+    mBufferMult  :: Double
 wageAdj         = 0.019
 priceAdj        = 0.02
 -- | Probability for households to replace a shop wich could not provide
@@ -67,6 +68,11 @@ satProb         = 0.1
 -- | A parameter to determine households monthly demand as a function of its
 -- monthly demand. Default is 0.9.
 consAlpha       = 0.9
+-- | Amount of satisfied demand needed before household ends shopping.
+-- Default is 0.95.
+-- Shopping can also end because there is no longer shops left.
+endShopTresh    = 0.95
+mBufferMult     = 0.1
 
 -- * State
 
@@ -81,7 +87,7 @@ data SimState = SimState {
     _householdIds   :: [Hid],
     _firms          :: !FMap,
     _firmIds        :: [Fid],
-    _timer          :: !Int
+    _timer          :: !(Int, Int, Int)
     }
 
 makeLenses ''SimState
@@ -93,7 +99,7 @@ startSim = SimState {
     _householdIds   = hids,
     _firms          = makeMapWith fids makeFirm,
     _firmIds        = fids,
-    _timer          = 0
+    _timer          = (0,0,0)
     } 
   where
     hids = [0..(householdN-1)]

@@ -16,8 +16,9 @@ data Household = Household {
     _hLiquity       :: !Money,
     _hShops         :: [(Fid, Money)],
     _hUnsatDemand   :: [(Fid, Money)],
-    _hMonthlyDemand :: Stuff,
+    _hDDemand       :: Stuff,
     _hEmployer      :: Maybe Fid,
+    _hWage          :: Maybe Money, --wage actually got
     _hResWage       :: Money
 }
 
@@ -50,8 +51,9 @@ makeHousehold i = Household {
     _hLiquity       = undefined,
     _hShops         = undefined,
     _hUnsatDemand   = [],
-    _hMonthlyDemand = 0, --determined later
+    _hDDemand       = 0, --determined later
     _hEmployer      = undefined,
+    _hWage          = undefined,
     _hResWage       = undefined
 }
 
