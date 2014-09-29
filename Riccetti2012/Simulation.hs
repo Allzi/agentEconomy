@@ -83,18 +83,18 @@ collectData =  do
 mapMw :: (Worker -> Simulation Worker) -> Simulation ()
 mapMw f = do
     ws <- use workers
-    ws' <- mapMOf traverse f ws
+    ws' <- traverse f ws
     workers .= ws'
 
 mapMp :: (Producer -> Simulation Producer) -> Simulation ()
 mapMp f = do
     ps <- use producers
-    ps' <- mapMOf traverse f ps
+    ps' <- traverse f ps
     producers .= ps'
 
 mapMb :: (Bank -> Simulation Bank) -> Simulation ()
 mapMb f = do
     bs <- use banks
-    bs' <- mapMOf traverse f bs
+    bs' <- traverse f bs
     banks .= bs'
     
