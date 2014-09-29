@@ -12,8 +12,13 @@ type Stuff = Double
 
 
 data Household = Household {
-    _hID        :: !Hid,
-    _hLiquity   :: !Money
+    _hID            :: !Hid,
+    _hLiquity       :: !Money,
+    _hShops         :: [(Fid, Money)],
+    _hUnsatDemand   :: [(Fid, Money)],
+    _hMonthlyDemand :: Stuff,
+    _hEmployer      :: Maybe Fid,
+    _hResWage       :: Money
 }
 
 data Firm = Firm {
@@ -22,6 +27,7 @@ data Firm = Firm {
     _fPrice             :: !Money,
     -- Workers
     _fWorkers           :: [Hid],
+    _fSize              :: Int,
     _fFiring            :: Maybe Hid, --Worker to be fired after a month
     _fWageRate          :: !Money,
     _fOpenPositions     :: !Int,
@@ -40,8 +46,13 @@ makeMapWith ids a = Map.fromList $ fmap (\i -> (i, a i)) ids
 
 makeHousehold :: Hid -> Household
 makeHousehold i = Household {
-    _hID        = i,
-    _hLiquity   = undefined
+    _hID            = i,
+    _hLiquity       = undefined,
+    _hShops         = undefined,
+    _hUnsatDemand   = [],
+    _hMonthlyDemand = 0, --determined later
+    _hEmployer      = undefined,
+    _hResWage       = undefined
 }
 
 
@@ -51,13 +62,14 @@ makeFirm i = Firm {
     _fLiquity           = undefined,
     _fPrice             = 1,
     -- Workers
-    _fWorkers           = [],
+    _fWorkers           = undefined,
+    _fSize              = undefined,
     _fFiring            = Nothing,
-    _fWageRate          = 1,
+    _fWageRate          = undefined,
     _fOpenPositions     = 0,
     _fFullStaffMonths   = 0,
     -- Stuff
     _fInventory         = 0,
-    _fMDemand           = 1
+    _fMDemand           = undefined
 }
 

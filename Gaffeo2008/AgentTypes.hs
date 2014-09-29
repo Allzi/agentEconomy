@@ -59,6 +59,7 @@ makeLenses ''Bank
 makeMapWith :: [Int] -> (Int -> a) -> Map.IntMap a
 makeMapWith ids a = Map.fromList $ fmap (\i -> (i, a i)) ids
 
+makeWorker :: Int -> Worker
 makeWorker i = Worker {
     _wID = i,
     _wEmployer = Nothing,
@@ -69,7 +70,7 @@ makeWorker i = Worker {
 }
 
 
-
+makeProducer :: Int -> Producer
 makeProducer i = Producer {
     _pID = i,
     _pWorkers = [],
@@ -88,6 +89,7 @@ makeProducer i = Producer {
     _pAC = 1
 }
 
+makeBank :: Int -> Bank
 makeBank i = Bank {
     _bID = i,
     _bCash = 10.0,

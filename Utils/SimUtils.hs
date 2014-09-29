@@ -43,6 +43,7 @@ randIds (r:rs) ids idNum toTake = (rs', i:ls)
     rind = floor $ r*fromIntegral idNum
     i = ids !! rind
     ids' = delete i ids
+randIds [] _ _ _ = error "Limited randoms!"
 
 shuffle :: (RSim s, Eq a) => [a]-> Int -> s [a]
 shuffle l n =
@@ -91,9 +92,9 @@ runMarket m = do
 
 marketLoop :: RSim (State s) => Market s a b -> 
     [Seller] -> [Buyer] -> State s ()
-marketLoop m sellers buyers = do 
-    shuffled <- shuffle buyers (length buyers)
-    (sellers', buyers') <- foldM tryMatch (sellers, []) shuffled
+marketLoop m sells buys = do 
+    shuffled <- shuffle buys (length buys)
+    (sellers', buyers') <- foldM tryMatch (sells, []) shuffled
     unless (shouldStop sellers' buyers') $ 
         marketLoop m sellers' buyers'
   where
@@ -105,12 +106,12 @@ marketLoop m sellers buyers = do
     getB        = m^.mGetBuyer
 
     tryMatch (sellers, buyers) b =  do
-        let (filtered, _) = partition (\s -> (askPrice s) <= (bidPrice b)) sellers
-        if null filtered
+        let (fSellers, _) = partition (\s -> (askPrice s) <= (bidPrice b)) sellers
+        if null fSellers
             then return (sellers, b:buyers)
             else do
                 -- take random suppliers
-                rSellers <- randSim $ (\rs -> randIds rs filtered (length filtered) trials)
+                rSellers <- randSim $ (\rs -> randIds rs fSellers (length fSellers) trials)
                 -- choose cheapest offer and match
                 let best = minimumBy (compare `on` askPrice) rSellers
                 Just d <- use $ (cloneLens demanders).at (buyerId b)
@@ -135,8 +136,8 @@ marketLoop m sellers buyers = do
             then True
             else False
       where
-        smallAsk ss = askPrice $ minimumBy (compare `on` askPrice) ss
-        bigBid ds   = bidPrice $ maximumBy (compare `on` bidPrice) ds
+        smallAsk s  = askPrice $ minimumBy (compare `on` askPrice) s
+        bigBid d    = bidPrice $ maximumBy (compare `on` bidPrice) d
 
 
 
