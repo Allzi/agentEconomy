@@ -3,13 +3,8 @@ module Simulation where
 import Control.Lens
 import Control.Monad.State.Strict
 import Data.Random
-import System.Random
-import Control.Applicative
-import qualified Data.Traversable as T
 
-import SimUtils
 import AgentTypes
-import Debug.Trace
 
 
 
@@ -23,7 +18,7 @@ firmN           = 100
 -- | The random seed of the simulation.
 seed            = 1
 -- | The length of the simulation.
-duration        = 1000
+duration        = 100
 -- | Months of full staff before the firm starts to lower its wage. 
 -- Default is 24.
 rateDropWait    = 24
@@ -36,12 +31,14 @@ daysInMonth     = 21
 shopN           = 7
 
 -- | MAGIC
-wageAdj, priceAdj, qSearchProb, pSearchProb, diffToReplace,
+wageAdj, priceAdj, resWageDrop, qSearchProb, pSearchProb, diffToReplace,
     iLowerBound, iUpperBound, pLowerBound, pUpperBound, 
-    productivity, unsatProb, satProb, consAlpha, endShopTresh
+    productivity, unsatProb, satProb, consAlpha, endShopTresh,
     mBufferMult  :: Double
 wageAdj         = 0.019
 priceAdj        = 0.02
+-- | How much reservation wage drops after a month of unemployment. Default is 0.1.
+resWageDrop     = 0.1
 -- | Probability for households to replace a shop wich could not provide
 -- enough goods last month. Default is 0.25.
 qSearchProb     = 0.25
@@ -87,6 +84,8 @@ data SimState = SimState {
     _householdIds   :: [Hid],
     _firms          :: !FMap,
     _firmIds        :: [Fid],
+    _sDividends     :: Money,
+    _sHousWealth    :: Money,
     _timer          :: !(Int, Int, Int)
     }
 
@@ -99,6 +98,8 @@ startSim = SimState {
     _householdIds   = hids,
     _firms          = makeMapWith fids makeFirm,
     _firmIds        = fids,
+    _sDividends     = 0,
+    _sHousWealth    = 0,
     _timer          = (0,0,0)
     } 
   where

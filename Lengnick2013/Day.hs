@@ -1,15 +1,10 @@
 module Day where
 import Control.Lens
 import Control.Monad.State.Strict
-import qualified Data.IntMap as Map
-import Data.List
-import Debug.Trace
-import System.Random
 import Data.Random
 
 import AgentTypes
 import Simulation
-import SimUtils
 
 -- | Progress one day in simulation.
 -- Households buy stuff.
@@ -53,7 +48,7 @@ visitShops h d ((fid, p):fs) = do
         then do
             let unsat = dem - (f^.fInventory)
                 f' = f&fInventory   .~ 0
-                      &fMDemand     +~ dem
+                      &fMDemand     +~ dem - unsat
                       &fLiquity     +~ (f^.fInventory) * p
             firms.ix fid .= f'
             let h' = h&hUnsatDemand %~ addUnsat fid unsat
@@ -69,10 +64,10 @@ visitShops h d ((fid, p):fs) = do
             let h' = h&hLiquity -~ dem*p
             return h'
     addUnsat :: Fid -> Double -> [(Fid, Double)]-> [(Fid, Double)]
-    addUnsat fid u [] = [(fid, u)]
-    addUnsat fid u ((fid1, ud):ls) = if fid1 == fid
-        then (fid1, ud+d):ls
-        else (fid1, ud):(addUnsat fid u ls)
+    addUnsat fid1 u [] = [(fid1, u)]
+    addUnsat fid1 u ((fid2, ud):ls) = if fid2 == fid1
+        then (fid2, ud+d):ls
+        else (fid2, ud):(addUnsat fid1 u ls)
 
 
 produceGoods :: Simulation ()

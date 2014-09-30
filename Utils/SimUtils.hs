@@ -4,11 +4,14 @@ import Data.List
 import Data.Function
 import Control.Monad.State.Strict
 import Control.Lens
+import Data.Random hiding (shuffle)
+import Control.Applicative
 import qualified Data.IntMap as M
 
 type SimData = [(String, Double)]
 
 --------------Simulation with random-------------------
+--Will be removed when I have time for it.
 
 class Monad a => RSim a where
     setRandom :: [Double] -> a ()
@@ -48,6 +51,28 @@ randIds [] _ _ _ = error "Limited randoms!"
 shuffle :: (RSim s, Eq a) => [a]-> Int -> s [a]
 shuffle l n =
     randSim (\rs -> randIds rs l n n)
+
+
+--------------------New utilities-------------------------
+
+-- | An utility function, that adjusts uniformly the double given as the second
+-- argument. The first argument tells the maximum relative adjustment.
+-- Giving negative maximum adjustment makes the adjustment negative.
+uniformAdj :: Double -> Double -> RVar Double
+uniformAdj adj a = (\r -> a * (1 + adj * r)) <$> stdUniform
+
+-- | Gets random element from a list with given weights.
+whRandElem :: [a] -> (a -> Double) -> Double -> RVar a
+whRandElem list weight m = do
+    r <- uniform 0 m
+    fetchElem r list
+  where
+    fetchElem r (l:ls) = do
+        let nr = r - weight l
+        if nr <= 0
+            then return l
+            else fetchElem nr ls
+    fetchElem r [] = error ("Empty list or too big sum of weights! " ++  show r)
 
 
 ----------------------------Market-----------------------------
