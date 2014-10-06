@@ -61,6 +61,15 @@ shuffle l n =
 uniformAdj :: Double -> Double -> RVar Double
 uniformAdj adj a = (\r -> a * (1 + adj * r)) <$> stdUniform
 
+
+-- | A bit faster random element getter.
+-- It is a partial function and can fail if given length is too big.
+randomElementN :: Int -> [a] -> RVar a
+randomElementN _ [] = error "empty list"
+randomElementN n xs = do
+    i <- uniformT 0 (n-1)
+    return (xs !! i)
+
 -- | Gets random element from a list with given weights.
 whRandElem :: [a] -> (a -> Double) -> Double -> RVar a
 whRandElem list weight m = do

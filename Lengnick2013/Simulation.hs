@@ -9,7 +9,7 @@ import AgentTypes
 
 
 -- * Parameters
-rateDropWait, householdN, firmN, seed, duration, unempVisits, 
+rateDropWait, householdN, firmN, seed, duration, burnIn, unempVisits, 
     daysInMonth, shopN :: Int
 -- | The number of households, default is 1000.
 householdN      = 1000
@@ -18,7 +18,9 @@ firmN           = 100
 -- | The random seed of the simulation.
 seed            = 1
 -- | The length of the simulation.
-duration        = 100
+duration        = 500
+-- | Burn-in duration, of which data is not collected.
+burnIn          = 450
 -- | Months of full staff before the firm starts to lower its wage. 
 -- Default is 24.
 rateDropWait    = 24
@@ -26,18 +28,23 @@ rateDropWait    = 24
 -- Default is 5.
 unempVisits     = 5
 -- | How many (working) days are in a month. Default is 21.
-daysInMonth     = 21
+daysInMonth     = 7
 -- | How many local shops (type A connections) a household has. Default is 7.
 shopN           = 7
 
 -- | MAGIC
-wageAdj, priceAdj, resWageDrop, qSearchProb, pSearchProb, diffToReplace,
-    iLowerBound, iUpperBound, pLowerBound, pUpperBound, 
+wageAdj, priceAdj, priceAdjProb, resWageDrop, qSearchProb, pSearchProb, 
+    diffToReplace,iLowerBound, iUpperBound, pLowerBound, pUpperBound, 
     productivity, unsatProb, satProb, consAlpha, endShopTresh,
     mBufferMult  :: Double
+-- | Maximum relative size of a wage adjustment. Default is 0.019.
 wageAdj         = 0.019
+-- | Maximum relative size of a price adjustment. Default is 0.02.
 priceAdj        = 0.02
--- | How much reservation wage drops after a month of unemployment. Default is 0.1.
+-- | Probability to adjust price at all. Default is 0.75.
+priceAdjProb    = 0.75
+-- | How much reservation wage drops after a month of unemployment.
+-- Default is 0.1.
 resWageDrop     = 0.1
 -- | Probability for households to replace a shop wich could not provide
 -- enough goods last month. Default is 0.25.
@@ -47,8 +54,10 @@ qSearchProb     = 0.25
 pSearchProb     = 0.25
 -- | Difference in price needed for replacement. Default is 0.01.
 diffToReplace   = 0.01
-
+-- | Limit of size of inventory relative to demand, below which a new worker
+-- is hired. Default is 0.25.
 iLowerBound     = 0.25
+-- | Upper limit, above which a worker is fired. Default is 1.
 iUpperBound     = 1
 -- | How much above marginal cost a price is lowered. Default is 1.15.
 pUpperBound     = 1.15
@@ -84,8 +93,8 @@ data SimState = SimState {
     _householdIds   :: [Hid],
     _firms          :: !FMap,
     _firmIds        :: [Fid],
-    _sDividends     :: Money,
-    _sHousWealth    :: Money,
+    _sDividends     :: !Money,
+    _sHousWealth    :: !Money,
     _timer          :: !(Int, Int, Int)
     }
 

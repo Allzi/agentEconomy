@@ -8,6 +8,7 @@ import Control.Lens
 import Control.Monad.State.Strict hiding (mapM_)
 import Data.Foldable
 import Data.Random
+import Data.Random.Distribution.Bernoulli
 
 import AgentTypes
 import Simulation
@@ -33,52 +34,62 @@ planStep = do
 adjustWage :: Firm -> Simulation Firm
 adjustWage f = do
     wage <- lift $ if 
-        | f^.fOpenPositions /= 0 -> 
+        | f^.fOpenPositions > 0 -> 
             uniformAdj wageAdj (f^.fWageRate)
         | f^.fFullStaffMonths < rateDropWait -> return (f^.fWageRate)
         | otherwise -> uniformAdj (-wageAdj) (f^.fWageRate)
     return $ f&fWageRate .~ wage
 
 fire :: Firm -> Simulation Firm
-fire f = case f^.fFiring of
-    Nothing -> return f
-    Just hid -> if any (==hid) (f^.fWorkers)
-        then do
-            households.ix hid %= (\h -> h&hEmployer .~ Nothing)
-            return $ f&fFiring          .~ Nothing
-                      &fOpenPositions   .~ 1
-                      &fSize            -~ 1
-                      &fWorkers         %~ filter (/=hid)
-        else return $ f&fFiring .~ Nothing
-
+fire f = if (f^.fFiring) && (f^.fSize > 0)
+    then do
+        hid <- lift $ randomElementN (f^.fSize) (f^.fWorkers)
+        households.ix hid %= (\h -> h&hEmployer .~ Nothing)
+        return $ f&fFiring          .~ False
+                  &fSize            -~ 1
+                  &fWorkers         %~ filter (/=hid)
+    else return $ f&fFiring .~ False
 
 hire :: Firm -> Simulation Firm
 hire f = lift $ if
     | f^.fInventory < iLowerBound * f^.fMDemand -> do
-        let f' = f&fOpenPositions +~ 1
-        updatePrice f'
+        let f' = f&fOpenPositions .~ 1
+        risePrice f'
     | f^.fInventory > iUpperBound * f^.fMDemand ->
         if f^.fSize > 1
             then do
-                fired <- randomElement (f^.fWorkers)
-                let f' = f&fOpenPositions .~ -1
-                          &fFiring .~ Just fired
-                updatePrice f'
-            else updatePrice f
+                let f' = f&fFiring .~ True
+                dropPrice f'
+            else dropPrice f
     | otherwise -> return f
 
--- | Price is updated only if hiring/firing decision is made.
-updatePrice :: Firm -> RVar Firm
-updatePrice f = if
-    | f^.fPrice > pUpperBound * mrc -> do
-        newP <- uniformAdj (-priceAdj) (f^.fPrice) 
-        return $ f&fPrice .~ newP
-    | f^.fPrice < pLowerBound * mrc -> do
-        newP <- uniformAdj priceAdj (f^.fPrice) 
-        return $ f&fPrice .~ newP
-    | otherwise -> return f
+-- | Price is risen only if hiring decision is made.
+-- Rising the price happens with a certain probability, 
+-- and with a random adjustment.
+risePrice :: Firm -> RVar Firm
+risePrice f = do
+    doesRise <- bernoulli priceAdjProb
+    if doesRise && (f^.fPrice < pLowerBound * mrc)
+        then do
+            newp <- uniformAdj priceAdj (f^.fPrice) 
+            return $ f&fPrice .~ newp
+        else return f
   where
     mrc = f^.fWageRate / (productivity * fromIntegral daysInMonth)
+
+-- | Price drop happens only if firing decision is made.
+-- Drop happens with a certain probability, and with a random adjustment.
+dropPrice :: Firm -> RVar Firm
+dropPrice f = do
+    doesChange <- bernoulli priceAdjProb
+    if doesChange && (f^.fPrice > pUpperBound * mrc)
+        then do
+            newp <- uniformAdj (-priceAdj) (f^.fPrice) 
+            return $ f&fPrice .~ newp
+        else return f
+  where
+    mrc = f^.fWageRate / (productivity * fromIntegral daysInMonth)
+
 
 
 

@@ -32,7 +32,8 @@ buyGoods = do
     makeVisits :: Hid -> Simulation ()
     makeVisits hid = do
         Just h <- use $ households.at hid
-        h' <- visitShops h (h^.hDDemand) (h^.hShops)
+        roShops <- lift $ shuffleN shopN (h^.hShops)
+        h' <- visitShops h (h^.hDDemand) roShops
         households.ix hid .= h'
 
 visitShops :: Household -> Stuff -> [(Fid, Money)] -> Simulation Household
@@ -41,33 +42,31 @@ visitShops h 0 _ = return h
 visitShops h d ((fid, p):fs) = do
     Just f <- use $ firms . at fid
     let maxAffort = h^.hLiquity / p
-    buy f (min maxAffort d)
+        dem = min maxAffort d
+        actDem = min (f^.fInventory) dem
+        unsat = dem - actDem
+
+    let f' = f&fInventory   -~ actDem
+              &fMDemand     +~ dem
+              &fLiquity     +~ actDem*p
+    firms.ix fid .= f'
+
+    let h' = h&hLiquity     -~ actDem*p
+              &hUnsatDemand %~ addUnsat fid unsat
+        unsatSmallEnough = unsat < (1-endShopTresh) * h^.hDDemand
+    if unsatSmallEnough
+        then return h'
+        else visitShops h' unsat fs 
   where
-    buy :: Firm -> Stuff -> Simulation Household
-    buy f dem = if f^.fInventory < dem
-        then do
-            let unsat = dem - (f^.fInventory)
-                f' = f&fInventory   .~ 0
-                      &fMDemand     +~ dem - unsat
-                      &fLiquity     +~ (f^.fInventory) * p
-            firms.ix fid .= f'
-            let h' = h&hUnsatDemand %~ addUnsat fid unsat
-                      &hLiquity     -~ (f^.fInventory) *p
-            if unsat < (1-endShopTresh) * h^.hDDemand
-                then return h'
-                else visitShops h' unsat fs
-        else do
-            let f' = f&fInventory   -~ dem
-                      &fMDemand     +~ dem
-                      &fLiquity     +~ dem*p
-            firms.ix fid .= f'
-            let h' = h&hLiquity -~ dem*p
-            return h'
     addUnsat :: Fid -> Double -> [(Fid, Double)]-> [(Fid, Double)]
-    addUnsat fid1 u [] = [(fid1, u)]
-    addUnsat fid1 u ((fid2, ud):ls) = if fid2 == fid1
-        then (fid2, ud+d):ls
-        else (fid2, ud):(addUnsat fid1 u ls)
+    addUnsat fid1 = go
+      where
+        go 0 ls = ls
+        go u [] = [(fid1, u)]
+        go u ((fid2, ud):ls) = if fid2 == fid1
+            then (fid2, ud+d):ls
+            else (fid2, ud):(addUnsat fid1 u ls)
+
 
 
 produceGoods :: Simulation ()

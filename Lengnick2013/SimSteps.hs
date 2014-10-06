@@ -1,11 +1,11 @@
 {-# LANGUAGE TemplateHaskell #-}
 module SimSteps where
-import Prelude hiding (foldl)
+import Prelude hiding (foldl, maximum, minimum)
 import Control.Lens
 import Control.Monad.State.Strict
 import qualified Data.IntMap as Map
 import Data.Foldable
-import Data.List hiding (foldl)
+import Data.List hiding (foldl, maximum, minimum)
 import Debug.Trace
 import System.Random
 import Data.Random
@@ -17,10 +17,11 @@ import Month
 
 -- | Purely runs the simulation with a seed.
 simulateSeed :: Int -> [SimData]
-simulateSeed seed = rev
+simulateSeed seed = outputData
   where
     (dataList, _) = sampleState (runSimulation [] startSim) (mkStdGen seed)
     rev = reverse dataList
+    outputData = drop burnIn rev
 
 
 -- | Loops simulation, returning the data.
@@ -47,10 +48,19 @@ initSimulation :: Simulation ()
 initSimulation = do
     fids <- use $ firmIds
     households <$=> getShops fids
+    households <$=> initJob fids
   where
     getShops fids h = do
         rfids <- lift $ shuffleNofM shopN firmN fids
         return $ h&hShops .~ (zip rfids (repeat 0))
+    initJob fids h = do
+        rfid <- lift $ randomElementN firmN fids
+        Just f <- use $ firms.at rfid
+        let f' = f&fWorkers %~ ((h^.hID):)
+                  &fSize    +~ 1
+        firms.ix rfid .= f'
+        return $ h&hEmployer .~ Just rfid
+                  &hWage     .~ Just (f^.fWageRate)
 
 -- | All the data is collected here.
 collectData :: Simulation SimData
@@ -66,6 +76,11 @@ collectData =  do
         op = foldl (\acc f -> acc + f^.fOpenPositions) 0 fs
         ow = (foldl (\acc f -> acc + f^.fWageRate) 0 fs) / fromIntegral firmN
         aw = (foldl (\acc h -> acc + h^.hResWage) 0 hs) / fromIntegral householdN
+        invs = (foldl (\acc f -> acc + f^.fInventory) 0 fs) / fromIntegral firmN
+        maxPrice = (maximum . fmap (\f -> f^.fPrice)) fs
+        minPrice = (minimum . fmap (\f -> f^.fPrice)) fs
+        maxSize = (maximum . fmap (\f -> fromIntegral (f^.fSize))) fs
+        minSize = (minimum . fmap (\f -> fromIntegral (f^.fSize))) fs
     return [("UnemployedN", une),
             ("Pricelevel", p),
             ("Open_Positions", fromIntegral op),
@@ -74,6 +89,11 @@ collectData =  do
             ("Accepted_Wage", aw),
             ("Household_Wealh", hw),
             ("Aggregate Dividends", divid),
+            ("Inventories", invs),
+            ("maxPrice", maxPrice),
+            ("maxSize", maxSize),
+            ("minSize", minSize),
+            ("minPrice", minPrice),
             ("Time", fromIntegral t)]
   where
     calcUne acc h = if h^.hEmployer == Nothing

@@ -16,10 +16,10 @@ data Household = Household {
     _hLiquity       :: !Money,
     _hShops         :: [(Fid, Money)],
     _hUnsatDemand   :: [(Fid, Money)],
-    _hDDemand       :: Stuff,
+    _hDDemand       :: !Stuff,
     _hEmployer      :: Maybe Fid,
     _hWage          :: Maybe Money, --wage actually got
-    _hResWage       :: Money
+    _hResWage       :: !Money
 }
 
 data Firm = Firm {
@@ -28,15 +28,15 @@ data Firm = Firm {
     _fPrice             :: !Money,
     -- Workers
     _fWorkers           :: [Hid],
-    _fSize              :: Int,
-    _fFiring            :: Maybe Hid, --Worker to be fired after a month
+    _fSize              :: !Int,
+    _fFiring            :: !Bool,
     _fWageRate          :: !Money,
     _fActualWage        :: !Money,
     _fOpenPositions     :: !Int,
-    _fFullStaffMonths   :: Int,
+    _fFullStaffMonths   :: !Int,
     -- Stuff
     _fInventory         :: !Stuff,
-    _fMDemand           :: Stuff --Sum of sales during a month
+    _fMDemand           :: !Stuff --Sum of sales during a month
 }
 
 
@@ -55,7 +55,7 @@ makeHousehold i = Household {
     _hDDemand       = 0, --determined later
     _hEmployer      = Nothing,
     _hWage          = Nothing,
-    _hResWage       = 2
+    _hResWage       = 8
 }
 
 
@@ -63,14 +63,14 @@ makeFirm :: Fid -> Firm
 makeFirm i = Firm {
     _fID                = i,
     _fLiquity           = 10,
-    _fPrice             = 1.2,
+    _fPrice             = 0.4,
     -- Workers
     _fWorkers           = [],
     _fSize              = 0,
-    _fFiring            = Nothing,
-    _fWageRate          = 3,
-    _fActualWage        = 3,
-    _fOpenPositions     = 11,
+    _fFiring            = False,
+    _fWageRate          = 8,
+    _fActualWage        = 8,
+    _fOpenPositions     = 0,
     _fFullStaffMonths   = 0,
     -- Stuff
     _fInventory         = 0,

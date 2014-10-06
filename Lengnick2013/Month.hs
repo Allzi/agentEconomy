@@ -20,12 +20,12 @@ runMonths = do
 -- | Advances simulation by one month.
 runMonth :: Simulation ()
 runMonth = do
-    planStep        -- From FBeginning
-    sellerSearch    -- From HBeginning
-    jobSearch       -- From HBeginning
-    consumptionPlans-- From HBeginning
+    planStep        -- from FBeginning
+    sellerSearch    -- from HBeginning
+    jobSearch       -- from HBeginning
+    consumptionPlans-- from HBeginning
     
-    runDays    
+    runDays         -- from Day
     
     accountingStep  -- from FEnd
     incomeGetting   -- from HEnd

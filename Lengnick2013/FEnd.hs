@@ -23,21 +23,25 @@ payWages f = f'
   where
     fSze = fromIntegral (f^.fSize)
     wageBill = f^.fWageRate * fSze
-    f' = if wageBill > f^.fLiquity
-        then f&fActualWage .~ (f^.fLiquity)/fSze
-             -- &fWageRate .~ (f^.fLiquity)/fSze
-              &fLiquity  .~ 0
-        else f&fLiquity -~ wageBill
-              &fActualWage .~ (f^.fWageRate)
+    liquity = f^.fLiquity
+    f' = if wageBill > liquity --Handles also fSize == 0?
+        then do
+            f&fActualWage .~ liquity/fSze
+             -- &fWageRate .~ liquity/fSze --no good!!
+             &fLiquity  .~ 0
+        else do
+            f&fLiquity -~ wageBill
+             &fActualWage .~ (f^.fWageRate)
     
 
 payDividends :: Firm -> Simulation Firm
-payDividends f = do
-    let fSze = fromIntegral (f^.fSize)
-        buffer = fSze * (f^.fWageRate) * mBufferMult
-        div = f^.fLiquity - buffer
-    if div < 0
-        then return f
-        else do
-            sDividends += div
-            return $ f&fLiquity -~ div
+payDividends f = if div > 0
+    then do
+        sDividends += div
+        return $ f&fLiquity -~ div
+    else return f
+  where 
+    fSze = fromIntegral (f^.fSize)
+    buffer = fSze * (f^.fWageRate) * mBufferMult
+    div = f^.fLiquity - buffer
+

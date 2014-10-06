@@ -1,5 +1,9 @@
 {-# LANGUAGE MultiWayIf #-}
-module HBeginning where
+module HBeginning
+( sellerSearch
+, jobSearch
+, consumptionPlans
+) where
 import Prelude hiding (sum, foldl, any, mapM_)
 
 import Control.Lens
@@ -19,13 +23,24 @@ import SimUtils
 sellerSearch :: Simulation ()
 sellerSearch = do
     fs <- use firms
-    let sizedFids = fmap (\f -> fromIntegral (f^.fSize)) fs
+    let sizedFids = fmap getFirmWeight fs
         wSum = sum sizedFids
-    households <$=> updateLinks sizedFids wSum
-    households %= fmap sortShops
-    
-updateLinks :: Map.IntMap Double -> Double -> Household -> Simulation Household
-updateLinks sfs weightSum hous = updatePrices hous >>= pSearch >>= qSearch
+    households <$=> updateShops (getRandFid sizedFids wSum)
+  where
+    getRandFid :: Map.IntMap Double -> Double -> Household -> RVar Fid
+    getRandFid sfs weightSum  h = do
+        let (sfs', ws) = foldl folder (sfs, weightSum) (h^.hShops)
+        (fid, _) <- whRandElem (Map.toList sfs') snd ws
+        return fid
+      where
+        folder (s, w) (fid, _) = (Map.delete fid s, w - weight)
+          where
+            Just weight = Map.lookup fid s
+    getFirmWeight :: Firm -> Double
+    getFirmWeight f = fromIntegral (f^.fSize + f^.fOpenPositions)
+
+updateShops :: (Household -> RVar Fid) -> Household -> Simulation Household
+updateShops getRandFid hous = updatePrices hous >>= pSearch >>= qSearch
   where
     updatePrices :: Household -> Simulation Household
     updatePrices h = do
@@ -36,52 +51,42 @@ updateLinks sfs weightSum hous = updatePrices hous >>= pSearch >>= qSearch
         updatePrice (fid, _) = do
             Just f <- use $ firms.at fid
             return (fid, f^.fPrice)
+
     pSearch :: Household -> Simulation Household
     pSearch h = do
         s <- lift $ bernoulli pSearchProb
         if s
             then do
-                (fid1, p1) <- lift $ randomElement (h^.hShops)
-                fid2 <- lift $ getRandFid h
-                Just f2 <- use $ firms.at fid2
+                (fid1, p1) <- lift $ randomElementN shopN (h^.hShops)
+                fid2       <- lift $ getRandFid h
+                Just f2    <- use $ firms.at fid2
                 if p1 > f2^.fPrice * (1 - diffToReplace)
-                    then do
-                        let h' = h&hShops %~ replaceShop fid1 (fid2, f2^.fPrice)
-                                  &hUnsatDemand %~ filter (\a -> fst a /= fid1)
-                        return h'
+                    then return $ 
+                        h&hShops %~ replaceShop fid1 (fid2, f2^.fPrice)
+                         &hUnsatDemand %~ filter (\a -> fst a /= fid1)
                     else return h
             else return h
+
     qSearch :: Household -> Simulation Household
     qSearch h = do
         s <- lift $ bernoulli qSearchProb
         if s && (not.null) (h^.hUnsatDemand)
             then do
                 let totWeight = (sum.fmap snd) (h^.hUnsatDemand)
-                (toReplace, _) <- lift $ whRandElem (h^.hUnsatDemand) snd totWeight
-                newS <- lift $ getRandFid h
-                Just f <- use $ firms.at newS
+                (toReplace, _)  <-
+                    lift $ whRandElem (h^.hUnsatDemand) snd totWeight
+                newS            <- lift $ getRandFid h
+                Just f          <- use $ firms.at newS
                 let h' = h&hShops %~ replaceShop toReplace (newS, f^.fPrice)
                           &hUnsatDemand .~ []
                 return h'
             else return h
-    getRandFid :: Household -> RVar Fid
-    getRandFid h = do
-        let (sfs', ws) = foldl folder (sfs, weightSum) (h^.hShops)
-        (fid, _) <- whRandElem (Map.toList sfs') snd ws
-        return fid
-      where
-        folder (s, w) (fid, _) = (Map.delete fid s, w - weight)
-          where
-            Just weight = Map.lookup fid s
+
     replaceShop :: Fid -> (Fid, Money) -> [(Fid, Money)] -> [(Fid, Money)]
     replaceShop fid nShop shops = nShop:filt
       where
         filt = filter (( /= fid) . fst) shops
         
-
-sortShops :: Household -> Household
-sortShops h = h&hShops %~ sortBy (compare `on` snd)
-
 
 -- | Job search is done in random order.
 jobSearch :: Simulation ()
@@ -106,17 +111,12 @@ searchJ h = case h^.hEmployer of
     Just fid -> do
         let Just w = h^.hWage
         Just f <- use $ firms.at fid
-        if w < h^.hResWage
-            then do
-                doSearch <- lift $ bernoulli unsatProb
-                if doSearch 
-                    then searchBetter f
-                    else return h
-            else do
-                doSearch <- lift $ bernoulli satProb
-                if doSearch 
-                    then searchBetter f
-                    else return h
+        doSearch <- lift $ if w < h^.hResWage
+            then bernoulli unsatProb
+            else bernoulli satProb
+        if doSearch 
+            then searchBetter f
+            else return h
   where 
     searchGoodEnough :: Int -> Simulation Household
     searchGoodEnough 0 = return h
@@ -124,7 +124,7 @@ searchJ h = case h^.hEmployer of
         fids <- use firmIds
         fid <- lift $ randomElement fids
         Just f <- use $ firms.at fid
-        if (f^.fActualWage > h^.hResWage) && (f^.fOpenPositions > 0)
+        if (f^.fWageRate > h^.hResWage) && (f^.fOpenPositions > 0)
             then do
                 let f' = hireWorker (h^.hID) f
                 firms.ix fid .= f'
@@ -136,7 +136,7 @@ searchJ h = case h^.hEmployer of
         fids <- use firmIds
         rFid <- lift $ randomElement (filter (/=(f^.fID)) fids)
         Just f2 <- use $ firms.at rFid
-        if (f2^.fOpenPositions > 0) && (f2^.fActualWage > f^.fActualWage)
+        if (f2^.fOpenPositions > 0) && (f2^.fWageRate > f^.fWageRate)
             then do
                 let f' = loseWorker (h^.hID) f
                 firms.ix (f'^.fID) .= f'

@@ -30,9 +30,9 @@ getWageInc h = case h^.hEmployer of
     Nothing -> return $ h&hWage .~ Nothing
     Just fid -> do
         Just f <- use $ firms.at fid
-        let w = f^.fActualWage
-        return $ h&hWage    .~ Just w
-                  &hLiquity +~ w
+        let aw = f^.fActualWage
+        return $ h&hWage    .~ Just aw
+                  &hLiquity +~ aw
 
 getDivInc :: Money -> Money -> Household -> Household
 getDivInc w d h = h&hLiquity +~ ((h^.hLiquity) * d) / w
