@@ -59,9 +59,10 @@ visitShops h d ((fid, p):fs) = do
         else visitShops h' unsat fs 
   where
     addUnsat :: Fid -> Double -> [(Fid, Double)]-> [(Fid, Double)]
-    addUnsat fid1 = go
+    addUnsat fid1 d ls = if d > 0 
+        then go d ls
+        else ls
       where
-        go 0 ls = ls
         go u [] = [(fid1, u)]
         go u ((fid2, ud):ls) = if fid2 == fid1
             then (fid2, ud+d):ls

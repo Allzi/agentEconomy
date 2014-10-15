@@ -25,25 +25,15 @@ incomeGetting = do
         hs <- use households
         sHousWealth .= (sum.fmap _hLiquity) hs
 
+-- | Household collects its wage income and updates the reservation wage.
 getWageInc :: Household -> Simulation Household
 getWageInc h = case h^.hEmployer of
-    Nothing -> return $ h&hWage .~ Nothing
+    Nothing -> return $ h&hResWage *~ (1 - resWageDrop)                       
     Just fid -> do
         Just f <- use $ firms.at fid
-        let aw = f^.fActualWage
-        return $ h&hWage    .~ Just aw
-                  &hLiquity +~ aw
+        let w = f^.fWageRate
+        return $ h&hResWage %~ max w
+                  &hLiquity +~ w
 
 getDivInc :: Money -> Money -> Household -> Household
 getDivInc w d h = h&hLiquity +~ ((h^.hLiquity) * d) / w
-
-adjustResWages :: Simulation ()
-adjustResWages = households %= fmap adjustW
-  where
-    adjustW :: Household -> Household
-    adjustW h = case h^.hWage of
-        Nothing -> h&hResWage *~ (1 - resWageDrop)
-        Just w -> if w > h^.hResWage
-            then h&hResWage .~ w
-            else h
-    

@@ -4,7 +4,12 @@ import Control.Lens
 import Control.Monad.State.Strict
 import Data.Random
 
+import Prelude hiding (foldl, maximum, minimum)
+import Data.Foldable
+
 import AgentTypes
+import SimUtils
+import Control.DeepSeq
 
 
 
@@ -18,17 +23,17 @@ firmN           = 100
 -- | The random seed of the simulation.
 seed            = 1
 -- | The length of the simulation.
-duration        = 500
+duration        = 100
 -- | Burn-in duration, of which data is not collected.
-burnIn          = 450
+burnIn          = 0
 -- | Months of full staff before the firm starts to lower its wage. 
--- Default is 24.
-rateDropWait    = 24
+-- Default is 1. (There is a mistake in the article)
+rateDropWait    = 1
 -- | The number of firms that an unemployed visits when searching for a job.
 -- Default is 5.
 unempVisits     = 5
 -- | How many (working) days are in a month. Default is 21.
-daysInMonth     = 7
+daysInMonth     = 21
 -- | How many local shops (type A connections) a household has. Default is 7.
 shopN           = 7
 
@@ -38,11 +43,11 @@ wageAdj, priceAdj, priceAdjProb, resWageDrop, qSearchProb, pSearchProb,
     productivity, unsatProb, satProb, consAlpha, endShopTresh,
     mBufferMult  :: Double
 -- | Maximum relative size of a wage adjustment. Default is 0.019.
-wageAdj         = 0.019
+wageAdj         = 0.02
 -- | Maximum relative size of a price adjustment. Default is 0.02.
-priceAdj        = 0.02
+priceAdj        = 0.019
 -- | Probability to adjust price at all. Default is 0.75.
-priceAdjProb    = 0.75
+priceAdjProb    = 0.78
 -- | How much reservation wage drops after a month of unemployment.
 -- Default is 0.1.
 resWageDrop     = 0.1
@@ -73,7 +78,7 @@ unsatProb       = 1
 satProb         = 0.1
 -- | A parameter to determine households monthly demand as a function of its
 -- monthly demand. Default is 0.9.
-consAlpha       = 0.9
+consAlpha       = 0.885
 -- | Amount of satisfied demand needed before household ends shopping.
 -- Default is 0.95.
 -- Shopping can also end because there is no longer shops left.
@@ -95,7 +100,8 @@ data SimState = SimState {
     _firmIds        :: [Fid],
     _sDividends     :: !Money,
     _sHousWealth    :: !Money,
-    _timer          :: !(Int, Int, Int)
+    _timer          :: !(Int, Int, Int),
+    _sData          :: [SimData]
     }
 
 makeLenses ''SimState
@@ -109,7 +115,8 @@ startSim = SimState {
     _firmIds        = fids,
     _sDividends     = 0,
     _sHousWealth    = 0,
-    _timer          = (0,0,0)
+    _timer          = (0,0,0),
+    _sData          = []
     } 
   where
     hids = [0..(householdN-1)]
@@ -125,5 +132,49 @@ mapMSim l sim = (l .=) =<< (use l <&> traverse sim & join)
 
 infixl 4 <$=> 
 (<$=>) = mapMSim
+
+-- | All the data is collected here.
+collectData :: Simulation ()
+collectData = do
+    t <- use $ timer . _1
+    when (t >= burnIn) $ do
+        d <- cData
+        d `deepseq` sData %= (d:)
+  where
+    cData = do
+        t <- use $ timer._1
+        hw <- use sHousWealth
+        divid <- use sDividends
+        hs <- use households
+        fs <- use firms
+        let une = foldl calcUne 0 hs
+            p = (foldl (\acc f -> acc + f^.fPrice) 0 fs) / fromIntegral firmN
+            usdem = (foldl (\acc f -> acc + f^.fMDemand) 0 fs) / fromIntegral firmN
+            op = foldl (\acc f -> acc + f^.fSizeTarget - f^.fSize) 0 fs
+            ow = (foldl (\acc f -> acc + f^.fWageRate) 0 fs) / fromIntegral firmN
+            aw = (foldl (\acc h -> acc + h^.hResWage) 0 hs) / fromIntegral householdN
+            invs = (foldl (\acc f -> acc + f^.fInventory) 0 fs) / fromIntegral firmN
+            maxPrice = (maximum . fmap (\f -> f^.fPrice)) fs
+            minPrice = (minimum . fmap (\f -> f^.fPrice)) fs
+            maxSize = (maximum . fmap (\f -> fromIntegral (f^.fSize))) fs
+            minSize = (minimum . fmap (\f -> fromIntegral (f^.fSize))) fs
+        return [("UnemployedN", une),
+                ("Pricelevel", p),
+                ("Open_Positions", fromIntegral op),
+                ("Unsatisfied_Demand", usdem),
+                ("Offered_Wage", ow),
+                ("Accepted_Wage", aw),
+                ("Household_Wealh", hw),
+                ("Aggregate Dividends", divid),
+                ("Inventories", invs),
+                ("maxPrice", maxPrice),
+                ("maxSize", maxSize),
+                ("minSize", minSize),
+                ("minPrice", minPrice),
+                ("Time", fromIntegral t)]
+    calcUne acc h = if h^.hEmployer == Nothing
+        then acc + 1
+        else acc
+
 
 

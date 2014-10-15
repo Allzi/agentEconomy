@@ -71,8 +71,9 @@ randomElementN n xs = do
     return (xs !! i)
 
 -- | Gets random element from a list with given weights.
-whRandElem :: [a] -> (a -> Double) -> Double -> RVar a
-whRandElem list weight m = do
+-- Old version.
+whRandElem' :: [a] -> (a -> Double) -> Double -> RVar a
+whRandElem' list weight m = do
     r <- uniform 0 m
     fetchElem r list
   where
@@ -83,6 +84,18 @@ whRandElem list weight m = do
             else fetchElem nr ls
     fetchElem r [] = error ("Empty list or too big sum of weights! " ++  show r)
 
+-- | Gets random element from a list with given weights.
+-- New version.
+whRandElem :: [(a, Double)] -> RVar a
+whRandElem ls = do
+    r <- stdUniform
+    return $ go ls r
+  where
+    go []        _ = error "Empty list!"
+    go ((a, _):[]) _ = a
+    go ((a, w):ls) r = if w >= r
+        then a
+        else go ls (r-w)
 
 ----------------------------Market-----------------------------
 -- A simple s&m market design from Riccetti 2012

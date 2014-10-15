@@ -24,14 +24,12 @@ payWages f = f'
     fSze = fromIntegral (f^.fSize)
     wageBill = f^.fWageRate * fSze
     liquity = f^.fLiquity
-    f' = if wageBill > liquity --Handles also fSize == 0?
+    f' = if wageBill > liquity && f^.fSize > 0
         then do
-            f&fActualWage .~ liquity/fSze
-             -- &fWageRate .~ liquity/fSze --no good!!
+            f&fWageRate .~ liquity/fSze
              &fLiquity  .~ 0
         else do
             f&fLiquity -~ wageBill
-             &fActualWage .~ (f^.fWageRate)
     
 
 payDividends :: Firm -> Simulation Firm

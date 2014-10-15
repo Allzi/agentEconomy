@@ -4,14 +4,14 @@ module HBeginning
 , jobSearch
 , consumptionPlans
 ) where
-import Prelude hiding (sum, foldl, any, mapM_)
+import Prelude hiding (sum, foldl, any, mapM_, elem)
 
 import Control.Lens
 import Control.Monad.State.Strict hiding (mapM_)
 import qualified Data.IntMap as Map
 import Data.Foldable
 import Data.Function
-import Data.List hiding (sum, foldl, any)
+import Data.List hiding (sum, foldl, any, elem)
 import Data.Random
 import Data.Random.Distribution.Bernoulli
 
@@ -30,15 +30,16 @@ sellerSearch = do
     getRandFid :: Map.IntMap Double -> Double -> Household -> RVar Fid
     getRandFid sfs weightSum  h = do
         let (sfs', ws) = foldl folder (sfs, weightSum) (h^.hShops)
-        (fid, _) <- whRandElem (Map.toList sfs') snd ws
+        (fid, _) <- whRandElem' (Map.toList sfs') snd ws
         return fid
       where
         folder (s, w) (fid, _) = (Map.delete fid s, w - weight)
           where
             Just weight = Map.lookup fid s
     getFirmWeight :: Firm -> Double
-    getFirmWeight f = fromIntegral (f^.fSize + f^.fOpenPositions)
+    getFirmWeight f = fromIntegral (f^.fSize)
 
+-- | Household searches cheaper (pSearch) or more reliable (qSearch) links.
 updateShops :: (Household -> RVar Fid) -> Household -> Simulation Household
 updateShops getRandFid hous = updatePrices hous >>= pSearch >>= qSearch
   where
@@ -74,11 +75,14 @@ updateShops getRandFid hous = updatePrices hous >>= pSearch >>= qSearch
             then do
                 let totWeight = (sum.fmap snd) (h^.hUnsatDemand)
                 (toReplace, _)  <-
-                    lift $ whRandElem (h^.hUnsatDemand) snd totWeight
-                newS            <- lift $ getRandFid h
-                Just f          <- use $ firms.at newS
+                    lift $ whRandElem' (h^.hUnsatDemand) snd totWeight
+                --Get a new random firm, which replaces old one.
+                fids <- use firmIds
+                let (_, filteredFids) = partition (`elem` (fmap fst (h^.hShops))) fids
+                newS  <- lift $ randomElementN (firmN - shopN) filteredFids
+                Just f <- use $ firms.at newS
+                
                 let h' = h&hShops %~ replaceShop toReplace (newS, f^.fPrice)
-                          &hUnsatDemand .~ []
                 return h'
             else return h
 
@@ -109,12 +113,13 @@ searchJ :: Household -> Simulation Household
 searchJ h = case h^.hEmployer of
     Nothing -> searchGoodEnough unempVisits
     Just fid -> do
-        let Just w = h^.hWage
         Just f <- use $ firms.at fid
-        doSearch <- lift $ if w < h^.hResWage
+        -- Satisfication with current wage.
+        doSearch <- lift $ if f^.fWageRate < h^.hResWage
             then bernoulli unsatProb
             else bernoulli satProb
-        if doSearch 
+
+        if doSearch && (f^.fSize > 1) -- last worker does not quit
             then searchBetter f
             else return h
   where 
@@ -122,9 +127,9 @@ searchJ h = case h^.hEmployer of
     searchGoodEnough 0 = return h
     searchGoodEnough i = do
         fids <- use firmIds
-        fid <- lift $ randomElement fids
+        fid <- lift $ randomElement fids -- FIXME: no two times the same firm
         Just f <- use $ firms.at fid
-        if (f^.fWageRate > h^.hResWage) && (f^.fOpenPositions > 0)
+        if (f^.fWageRate > h^.hResWage) && isHiring f
             then do
                 let f' = hireWorker (h^.hID) f
                 firms.ix fid .= f'
@@ -136,7 +141,9 @@ searchJ h = case h^.hEmployer of
         fids <- use firmIds
         rFid <- lift $ randomElement (filter (/=(f^.fID)) fids)
         Just f2 <- use $ firms.at rFid
-        if (f2^.fOpenPositions > 0) && (f2^.fWageRate > f^.fWageRate)
+        if isHiring f2 && 
+           (f2^.fWageRate > f^.fWageRate) &&
+           (f2^.fWageRate > h^.hResWage)
             then do
                 let f' = loseWorker (h^.hID) f
                 firms.ix (f'^.fID) .= f'
@@ -154,6 +161,7 @@ consumptionPlans = households %= fmap planConsumption
   where
     planConsumption :: Household -> Household
     planConsumption h = h&hDDemand .~ (demand / fromIntegral daysInMonth)
+                         &hUnsatDemand .~ []
       where
         avgP = (sum.fmap snd) (h^.hShops) / fromIntegral shopN
         realWealth = h^.hLiquity / avgP
@@ -163,14 +171,16 @@ consumptionPlans = households %= fmap planConsumption
 -- | What happens in a firm when an employee quits.
 loseWorker :: Hid -> Firm -> Firm
 loseWorker hid f = f&fWorkers       %~ filter (/=hid)
-                    &fOpenPositions +~ 1
                     &fSize          -~ 1
 
 -- | What happens in a firm when an employee is succesfully hired.
 hireWorker :: Hid -> Firm -> Firm
 hireWorker hid f = f&fWorkers       %~ (hid:)
-                    &fOpenPositions -~ 1
                     &fSize          +~ 1
-    
+                    
+-- | Compares target size to number of workers.
+-- Returns true if firm wants more. 
+isHiring :: Firm -> Bool
+isHiring f = f^.fSize < f^.fSizeTarget
 
 

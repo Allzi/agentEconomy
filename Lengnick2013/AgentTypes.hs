@@ -18,7 +18,6 @@ data Household = Household {
     _hUnsatDemand   :: [(Fid, Money)],
     _hDDemand       :: !Stuff,
     _hEmployer      :: Maybe Fid,
-    _hWage          :: Maybe Money, --wage actually got
     _hResWage       :: !Money
 }
 
@@ -31,8 +30,7 @@ data Firm = Firm {
     _fSize              :: !Int,
     _fFiring            :: !Bool,
     _fWageRate          :: !Money,
-    _fActualWage        :: !Money,
-    _fOpenPositions     :: !Int,
+    _fSizeTarget        :: !Int,
     _fFullStaffMonths   :: !Int,
     -- Stuff
     _fInventory         :: !Stuff,
@@ -49,31 +47,29 @@ makeMapWith ids a = Map.fromList $ fmap (\i -> (i, a i)) ids
 makeHousehold :: Hid -> Household
 makeHousehold i = Household {
     _hID            = i,
-    _hLiquity       = 10,
+    _hLiquity       = 100,
     _hShops         = undefined,
     _hUnsatDemand   = [],
     _hDDemand       = 0, --determined later
     _hEmployer      = Nothing,
-    _hWage          = Nothing,
-    _hResWage       = 8
+    _hResWage       = 0
 }
 
 
 makeFirm :: Fid -> Firm
 makeFirm i = Firm {
     _fID                = i,
-    _fLiquity           = 10,
-    _fPrice             = 0.4,
+    _fLiquity           = 0,
+    _fPrice             = 1,
     -- Workers
     _fWorkers           = [],
     _fSize              = 0,
     _fFiring            = False,
-    _fWageRate          = 8,
-    _fActualWage        = 8,
-    _fOpenPositions     = 0,
+    _fWageRate          = 52,
+    _fSizeTarget        = 0,
     _fFullStaffMonths   = 0,
     -- Stuff
-    _fInventory         = 0,
+    _fInventory         = 50,
     _fMDemand           = 0
 }
 

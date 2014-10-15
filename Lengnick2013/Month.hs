@@ -29,10 +29,11 @@ runMonth = do
     
     accountingStep  -- from FEnd
     incomeGetting   -- from HEnd
-    adjustResWages  -- from HEnd
+    
     timer._2 += 1
     m <- use $ timer._2
-
+    
+    collectData
     when (m < 12) runMonth
 
 
