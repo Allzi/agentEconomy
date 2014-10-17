@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell, FlexibleContexts, RankNTypes #-}
+{-# LANGUAGE TemplateHaskell, FlexibleContexts, RankNTypes, ViewPatterns #-}
 module SimUtils where
 import Data.List
 import Data.Function
@@ -7,6 +7,8 @@ import Control.Lens
 import Data.Random hiding (shuffle)
 import Control.Applicative
 import qualified Data.IntMap as M
+import qualified Data.Sequence as S
+import Data.Sequence ((><), ViewR (..), ViewL (..))
 
 type SimData = [(String, Double)]
 
@@ -69,6 +71,24 @@ randomElementN _ [] = error "empty list"
 randomElementN n xs = do
     i <- uniformT 0 (n-1)
     return (xs !! i)
+
+
+-- | Like randomElementN, but also returns the list without the random element.
+randomElementNR :: Int -> [a] -> RVar (a, [a])
+randomElementNR _ [] = error "empty list"
+randomElementNR n xs = do
+    i <- uniformT 0 (n-1)
+    let (bxs, (x:exs)) = splitAt i xs
+    return (x, bxs ++ exs)
+
+-- | Like randomElementNR, but for Sequences.
+-- No length needed, as it is O(1).
+randomElementSR :: S.Seq a -> RVar (a, S.Seq a)
+randomElementSR (S.viewl -> EmptyL) = error "empty sequence"
+randomElementSR xs = do
+    i <- uniformT 0 ((S.length xs) - 1)
+    let (bxs, (S.viewl -> (x :< exs))) = S.splitAt i xs
+    return (x, bxs >< exs)
 
 -- | Gets random element from a list with given weights.
 -- Old version.

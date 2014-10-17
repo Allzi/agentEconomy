@@ -23,7 +23,7 @@ firmN           = 100
 -- | The random seed of the simulation.
 seed            = 1
 -- | The length of the simulation.
-duration        = 100
+duration        = 50
 -- | Burn-in duration, of which data is not collected.
 burnIn          = 0
 -- | Months of full staff before the firm starts to lower its wage. 

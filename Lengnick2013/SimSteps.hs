@@ -4,10 +4,11 @@ import Prelude hiding (foldl, maximum, minimum)
 import Control.Lens
 import Control.Monad.State.Strict
 import qualified Data.IntMap as Map
+import qualified Data.Sequence as S
 import Data.Foldable
 import Data.List hiding (foldl, maximum, minimum)
 import Debug.Trace
-import System.Random
+import System.Random.Mersenne.Pure64
 import Data.Random
 import Control.DeepSeq
 
@@ -20,7 +21,8 @@ import Month
 simulateSeed :: Int -> [SimData]
 simulateSeed seed = rev
   where
-    (dataList, _) = sampleState (runSimulation startSim) (mkStdGen seed)
+    gen = pureMT (fromIntegral seed)
+    (dataList, _) = sampleState (runSimulation startSim) gen
     rev = reverse dataList
 
 
@@ -51,7 +53,7 @@ initSimulation = do
   where
     getShops fids h = do
         rfids <- lift $ shuffleNofM shopN firmN fids
-        return $ h&hShops .~ (zip rfids (repeat 0))
+        return $ h&hShops .~ zip rfids (repeat 0)
     initJob fids h = do
         rfid <- lift $ randomElementN firmN fids
         Just f <- use $ firms.at rfid
