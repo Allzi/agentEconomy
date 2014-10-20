@@ -3,13 +3,9 @@ module FEnd where
 import Prelude hiding (sum, foldl, any, mapM_)
 
 import Control.Lens
-import Control.Monad.State.Strict hiding (mapM_)
-import Data.Foldable
-import Data.Random
 
 import AgentTypes
 import Simulation
-import SimUtils
 
 
 accountingStep :: Simulation ()
@@ -33,13 +29,13 @@ payWages f = f'
     
 
 payDividends :: Firm -> Simulation Firm
-payDividends f = if div > 0
+payDividends f = if dividends > 0
     then do
-        sDividends += div
-        return $ f&fLiquity -~ div
+        sDividends += dividends
+        return $ f&fLiquity -~ dividends
     else return f
   where 
     fSze = fromIntegral (f^.fSize)
     buffer = fSze * (f^.fWageRate) * mBufferMult
-    div = f^.fLiquity - buffer
+    dividends = f^.fLiquity - buffer
 

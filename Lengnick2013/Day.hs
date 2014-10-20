@@ -2,6 +2,7 @@ module Day where
 import Control.Lens
 import Control.Monad.State.Strict
 import Data.Random
+import Data.RVar
 
 import AgentTypes
 import Simulation
@@ -27,7 +28,7 @@ runDays = do
 buyGoods :: Simulation ()
 buyGoods = do
     hids <- use householdIds
-    shuffleds <- lift $ shuffleN householdN hids
+    shuffleds <- sampleRVar $ shuffleN householdN hids
     mapM_ makeVisits shuffleds
   where
     makeVisits :: Hid -> Simulation ()
@@ -36,16 +37,17 @@ buyGoods = do
         h' <- visitShops h (h^.hDDemand) (h^.hShops) shopN
         households.ix hid .= h'
 
-visitShops :: Household -> Stuff -> [(Fid, Money)] -> Int -> Simulation Household
+visitShops :: Household -> Stuff -> [Fid] -> Int -> Simulation Household
 visitShops h _ []    _  = return h -- no shops left
 visitShops h _ _     0  = return h -- no shops left (?!)
 visitShops h 0 _     _  = return h -- no demand left.
 visitShops h d shops sn = do
     --choose random fid from list
-    ((fid, p), remainingShops) <- lift $ randomElementNR sn shops
+    (fid, remainingShops) <- sampleRVar $ randomElementNR sn shops
 
     Just f <- use $ firms . at fid
-    let maxAffort = h^.hLiquity / p
+    let p = f^.fPrice
+        maxAffort = h^.hLiquity / p
         dem = min maxAffort d
         actDem = min (f^.fInventory) dem
         unsat = dem - actDem
@@ -63,14 +65,14 @@ visitShops h d shops sn = do
         else visitShops h' unsat remainingShops (sn - 1)
   where
     addUnsat :: Fid -> Double -> [(Fid, Double)]-> [(Fid, Double)]
-    addUnsat fid1 d ls = if d > 0 
-        then go d ls
-        else ls
+    addUnsat fid1 u xs = if u > 0 
+        then go xs
+        else xs
       where
-        go u [] = [(fid1, u)]
-        go u ((fid2, ud):ls) = if fid2 == fid1
-            then (fid2, ud+d):ls
-            else (fid2, ud):(addUnsat fid1 u ls)
+        go [] = [(fid1, u)]
+        go ((fid2, ud):ls) = if fid2 == fid1
+            then (fid2, ud+u):ls
+            else (fid2, ud):(go ls)
 
 
 produceGoods :: Simulation ()

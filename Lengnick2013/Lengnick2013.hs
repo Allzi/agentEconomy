@@ -1,19 +1,13 @@
 module Main where
-import Control.Lens
-import Control.Monad.State.Strict
 import System.Directory
-import Control.DeepSeq
-
-import Data.Random
-import System.Random
 
 import SimSteps
 import SimIO
 
-
+main :: IO ()
 main = do
     let simData = simulateSeed 1
-    mapM printData simData
+    mapM_ printData simData
     
     createDirectoryIfMissing False "Output"
     setCurrentDirectory "Output"

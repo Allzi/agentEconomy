@@ -1,8 +1,10 @@
-{-# LANGUAGE TemplateHaskell, FlexibleInstances, RankNTypes #-}
+{-# LANGUAGE TemplateHaskell, FlexibleInstances, RankNTypes, GADTs #-}
 module Simulation where
 import Control.Lens
 import Control.Monad.State.Strict
-import Data.Random
+import Data.Random.Source
+import Unsafe.Coerce
+import Random.Xorshift
 
 import Prelude hiding (foldl, maximum, minimum)
 import Data.Foldable
@@ -14,14 +16,12 @@ import Control.DeepSeq
 
 
 -- * Parameters
-rateDropWait, householdN, firmN, seed, duration, burnIn, unempVisits, 
+rateDropWait, householdN, firmN, duration, burnIn, unempVisits, 
     daysInMonth, shopN :: Int
 -- | The number of households, default is 1000.
 householdN      = 1000
 -- | The number of firms, default is 100.
 firmN           = 100
--- | The random seed of the simulation.
-seed            = 1
 -- | The length of the simulation.
 duration        = 50
 -- | Burn-in duration, of which data is not collected.
@@ -89,7 +89,7 @@ mBufferMult     = 0.1
 
 -- |Shorter name for our state.
 -- Under the state monad is RVar from random-fu as a handy source of randomness.
-type Simulation = StateT SimState RVar
+type Simulation = State SimState
 
 -- |The state of the simulation.
 -- Holds the agents, households and firms, with their ids.
@@ -101,14 +101,15 @@ data SimState = SimState {
     _sDividends     :: !Money,
     _sHousWealth    :: !Money,
     _timer          :: !(Int, Int, Int),
-    _sData          :: [SimData]
+    _sData          :: [SimData],
+    _sRGen          :: Xorshift
     }
 
 makeLenses ''SimState
 
 -- |'startSim' is the starting state of simulation.
-startSim :: SimState
-startSim = SimState {
+startSim :: Int -> SimState
+startSim s = SimState {
     _households     = makeMapWith hids makeHousehold,
     _householdIds   = hids,
     _firms          = makeMapWith fids makeFirm,
@@ -116,11 +117,29 @@ startSim = SimState {
     _sDividends     = 0,
     _sHousWealth    = 0,
     _timer          = (0,0,0),
-    _sData          = []
+    _sData          = [],
+    _sRGen          = gen
     } 
   where
     hids = [0..(householdN-1)]
-    fids = [0..(firmN-1)] 
+    fids = [0..(firmN-1)]
+    gen = makeXorshift s
+
+
+
+
+$(monadRandom [d|
+        instance MonadRandom Simulation where
+            getRandomWord64 = do
+                gen <- use sRGen
+                let (r, gen') = next gen
+                sRGen .= gen'
+                return $ unsafeCoerce r -- hehee
+    |])
+
+
+
+
 
 -- * Utility functions 
 
@@ -150,7 +169,7 @@ collectData = do
         let une = foldl calcUne 0 hs
             p = (foldl (\acc f -> acc + f^.fPrice) 0 fs) / fromIntegral firmN
             usdem = (foldl (\acc f -> acc + f^.fMDemand) 0 fs) / fromIntegral firmN
-            op = foldl (\acc f -> acc + f^.fSizeTarget - f^.fSize) 0 fs
+            opos = foldl (\acc f -> acc + f^.fSizeTarget - f^.fSize) 0 fs
             ow = (foldl (\acc f -> acc + f^.fWageRate) 0 fs) / fromIntegral firmN
             aw = (foldl (\acc h -> acc + h^.hResWage) 0 hs) / fromIntegral householdN
             invs = (foldl (\acc f -> acc + f^.fInventory) 0 fs) / fromIntegral firmN
@@ -160,7 +179,7 @@ collectData = do
             minSize = (minimum . fmap (\f -> fromIntegral (f^.fSize))) fs
         return [("UnemployedN", une),
                 ("Pricelevel", p),
-                ("Open_Positions", fromIntegral op),
+                ("Open_Positions", fromIntegral opos),
                 ("Unsatisfied_Demand", usdem),
                 ("Offered_Wage", ow),
                 ("Accepted_Wage", aw),

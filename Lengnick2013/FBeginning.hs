@@ -9,6 +9,7 @@ import Control.Monad.State.Strict hiding (mapM_)
 import Data.Foldable
 import Data.Random
 import Data.Random.Distribution.Bernoulli
+import Data.RVar
 
 import AgentTypes
 import Simulation
@@ -33,11 +34,12 @@ planStep = do
 
 adjustWage :: Firm -> Simulation Firm
 adjustWage f = do
-    wage <- lift $ if 
+    wage <- if 
         | f^.fSizeTarget > f^.fSize -> 
-            uniformAdj wageAdj (f^.fWageRate)
+            sampleRVar $ uniformAdj wageAdj (f^.fWageRate)
         | f^.fFullStaffMonths < rateDropWait -> return (f^.fWageRate)
-        | otherwise -> uniformAdj (-wageAdj) (f^.fWageRate)
+        | otherwise ->
+            sampleRVar $ uniformAdj (-wageAdj) (f^.fWageRate)
     return $ f&fWageRate .~ wage
 
 -- | Firing is done with a lag of one month from the decision.
@@ -48,7 +50,7 @@ fire f = if (f^.fFiring) &&             -- Is firing decision triggered?
             (f^.fSize > 1) &&           -- Last worker is not fired.
             (f^.fSize > f^.fSizeTarget) -- Quitters are taken into account.
     then do
-        hid <- lift $ randomElementN (f^.fSize) (f^.fWorkers)
+        hid <- sampleRVar $ randomElementN (f^.fSize) (f^.fWorkers)
         households.ix hid %= (\h -> h&hEmployer .~ Nothing)
         return $ f&fSize            -~ 1
                   &fWorkers         %~ filter (/=hid)
@@ -56,7 +58,7 @@ fire f = if (f^.fFiring) &&             -- Is firing decision triggered?
     else return $ f
 
 setEmpTarget :: Firm -> Simulation Firm
-setEmpTarget f = lift $ if
+setEmpTarget f = if
     | (f^.fInventory < iLowerBound * f^.fMDemand) -> do
         let f' = f&fFiring .~ False
                   &fSizeTarget .~ max ((f^.fSize) + 1) (f^.fSizeTarget)
@@ -72,23 +74,23 @@ setEmpTarget f = lift $ if
 -- | Price is risen only if hiring decision is made.
 -- Rising the price happens with a certain probability, 
 -- and with a random adjustment.
-risePrice :: Firm -> RVar Firm
+risePrice :: Firm -> Simulation Firm
 risePrice f = do
-    doesRise <- bernoulli priceAdjProb
+    doesRise <- sampleRVar $ bernoulli priceAdjProb
     if doesRise && (f^.fPrice < pLowerBound * mrc f)
         then do
-            newp <- uniformAdj priceAdj (f^.fPrice) 
+            newp <- sampleRVar $ uniformAdj priceAdj (f^.fPrice) 
             return $ f&fPrice .~ newp
         else return f
 
 -- | Price drop happens only if firing decision is made.
 -- Drop happens with a certain probability, and with a random adjustment.
-dropPrice :: Firm -> RVar Firm
+dropPrice :: Firm -> Simulation Firm
 dropPrice f = do
-    doesChange <- bernoulli priceAdjProb
+    doesChange <- sampleRVar $ bernoulli priceAdjProb
     if doesChange && (f^.fPrice > pUpperBound * mrc f)
         then do
-            newp <- uniformAdj (-priceAdj) (f^.fPrice) 
+            newp <- sampleRVar $ uniformAdj (-priceAdj) (f^.fPrice) 
             return $ f&fPrice .~ newp
         else return f
 

@@ -7,12 +7,10 @@ module HBeginning
 import Prelude hiding (sum, foldl, any, mapM_, elem)
 
 import Control.Lens
-import Control.Monad.State.Strict hiding (mapM_)
-import qualified Data.IntMap as Map
+import qualified Data.IntMap.Strict as Map
 import Data.Foldable
-import Data.Function
-import Data.List hiding (sum, foldl, any, elem)
 import Data.Random
+import Data.RVar
 import Data.Random.Distribution.Bernoulli
 
 import AgentTypes
@@ -27,76 +25,65 @@ sellerSearch = do
         wSum = sum sizedFids
     households <$=> updateShops (getRandFid sizedFids wSum)
   where
-    getRandFid :: Map.IntMap Double -> Double -> Household -> RVar Fid
+    getRandFid :: Map.IntMap Double -> Double -> Household -> Simulation Fid
     getRandFid sfs weightSum  h = do
         let (sfs', ws) = foldl folder (sfs, weightSum) (h^.hShops)
-        (fid, _) <- whRandElem' (Map.toList sfs') snd ws
+        (fid, _) <- sampleRVar $ whRandElem' (Map.toList sfs') snd ws
         return fid
       where
-        folder (s, w) (fid, _) = (Map.delete fid s, w - weight)
+        folder (s, w) fid = (Map.delete fid s, w - weight)
           where
             Just weight = Map.lookup fid s
     getFirmWeight :: Firm -> Double
     getFirmWeight f = fromIntegral (f^.fSize)
 
 -- | Household searches cheaper (pSearch) or more reliable (qSearch) links.
-updateShops :: (Household -> RVar Fid) -> Household -> Simulation Household
-updateShops getRandFid hous = updatePrices hous >>= pSearch >>= qSearch
+updateShops :: (Household -> Simulation Fid) -> Household -> Simulation Household
+updateShops getRandFid hous = pSearch hous >>= qSearch
   where
-    updatePrices :: Household -> Simulation Household
-    updatePrices h = do
-        nShops <- traverse updatePrice (h^.hShops)
-        return $ h&hShops .~ nShops
-      where
-        updatePrice :: (Fid, Money) -> Simulation (Fid, Money)
-        updatePrice (fid, _) = do
-            Just f <- use $ firms.at fid
-            return (fid, f^.fPrice)
-
     pSearch :: Household -> Simulation Household
     pSearch h = do
-        s <- lift $ bernoulli pSearchProb
+        s <- sampleRVar $ bernoulli pSearchProb
         if s
             then do
-                (fid1, p1) <- lift $ randomElementN shopN (h^.hShops)
-                fid2       <- lift $ getRandFid h
-                Just f2    <- use $ firms.at fid2
-                if p1 > f2^.fPrice * (1 - diffToReplace)
-                    then return $ 
-                        h&hShops %~ replaceShop fid1 (fid2, f2^.fPrice)
-                         &hUnsatDemand %~ filter (\a -> fst a /= fid1)
-                    else return h
+                fid1 <- sampleRVar $ randomElementN shopN (h^.hShops)
+                fid2 <- getRandFid h
+                Just f1 <- use $ firms.at fid1
+                Just f2 <- use $ firms.at fid2
+                return $ if f1^.fPrice > f2^.fPrice * (1 - diffToReplace)
+                    then h&hShops %~ replaceShop fid1 fid2
+                          &hUnsatDemand %~ filter (\a -> fst a /= fid1)
+                    else h
             else return h
 
     qSearch :: Household -> Simulation Household
     qSearch h = do
-        s <- lift $ bernoulli qSearchProb
+        s <- sampleRVar $ bernoulli qSearchProb
         if s && (not.null) (h^.hUnsatDemand)
             then do
                 let totWeight = (sum.fmap snd) (h^.hUnsatDemand)
                 (toReplace, _)  <-
-                    lift $ whRandElem' (h^.hUnsatDemand) snd totWeight
+                    sampleRVar $ whRandElem' (h^.hUnsatDemand) snd totWeight
                 --Get a new random firm, which replaces old one.
                 fids <- use firmIds
-                let (_, filteredFids) = partition (`elem` (fmap fst (h^.hShops))) fids
-                newS  <- lift $ randomElementN (firmN - shopN) filteredFids
-                Just f <- use $ firms.at newS
+                let filteredFids = filter (not.(`elem` (h^.hShops))) fids
+                newS  <- sampleRVar $  randomElementN (firmN - shopN) filteredFids
                 
-                let h' = h&hShops %~ replaceShop toReplace (newS, f^.fPrice)
+                let h' = h&hShops %~ replaceShop toReplace newS
                 return h'
             else return h
 
-    replaceShop :: Fid -> (Fid, Money) -> [(Fid, Money)] -> [(Fid, Money)]
+    replaceShop :: Fid -> Fid -> [Fid] -> [Fid]
     replaceShop fid nShop shops = nShop:filt
       where
-        filt = filter (( /= fid) . fst) shops
+        filt = filter ( /= fid) shops
         
 
 -- | Job search is done in random order.
 jobSearch :: Simulation ()
 jobSearch = do
     hids <- use householdIds
-    shuffled <- lift $ shuffleN householdN hids
+    shuffled <- sampleRVar $ shuffleN householdN hids
     mapM_ search shuffled
   where
     search hid = do
@@ -115,9 +102,9 @@ searchJ h = case h^.hEmployer of
     Just fid -> do
         Just f <- use $ firms.at fid
         -- Satisfication with current wage.
-        doSearch <- lift $ if f^.fWageRate < h^.hResWage
-            then bernoulli unsatProb
-            else bernoulli satProb
+        doSearch <- sampleRVar . bernoulli $ if f^.fWageRate < h^.hResWage
+            then unsatProb
+            else satProb
 
         if doSearch && (f^.fSize > 1) -- last worker does not quit
             then searchBetter f
@@ -127,7 +114,7 @@ searchJ h = case h^.hEmployer of
     searchGoodEnough 0 = return h
     searchGoodEnough i = do
         fids <- use firmIds
-        fid <- lift $ randomElement fids -- FIXME: no two times the same firm
+        fid <- sampleRVar $ randomElementN firmN fids -- FIXME: no two times the same firm
         Just f <- use $ firms.at fid
         if (f^.fWageRate > h^.hResWage) && isHiring f
             then do
@@ -139,7 +126,7 @@ searchJ h = case h^.hEmployer of
     searchBetter :: Firm -> Simulation Household
     searchBetter f = do
         fids <- use firmIds
-        rFid <- lift $ randomElement (filter (/=(f^.fID)) fids)
+        rFid <- sampleRVar $ randomElementN (firmN - 1) (filter (/=(f^.fID)) fids)
         Just f2 <- use $ firms.at rFid
         if isHiring f2 && 
            (f2^.fWageRate > f^.fWageRate) &&
@@ -157,16 +144,22 @@ searchJ h = case h^.hEmployer of
 -- real wealth.
 -- Daily demand is monthly / 21.
 consumptionPlans :: Simulation ()
-consumptionPlans = households %= fmap planConsumption
+consumptionPlans = households <$=> planConsumption
   where
-    planConsumption :: Household -> Household
-    planConsumption h = h&hDDemand .~ (demand / fromIntegral daysInMonth)
-                         &hUnsatDemand .~ []
-      where
-        avgP = (sum.fmap snd) (h^.hShops) / fromIntegral shopN
-        realWealth = h^.hLiquity / avgP
-        demand = min (realWealth ** consAlpha) realWealth
-        
+    planConsumption :: Household -> Simulation Household
+    planConsumption h = do
+        ps <- getPSum (h^.hShops)
+        let avgP = ps / fromIntegral shopN
+            realWealth = h^.hLiquity / avgP
+            demand = min (realWealth ** consAlpha) realWealth
+        return $ h&hDDemand .~ (demand / fromIntegral daysInMonth)
+                  &hUnsatDemand .~ []
+    getPSum :: [Fid] -> Simulation Double
+    getPSum [] = return 0
+    getPSum (x:xs) = do
+        Just f <- use $ firms.at x
+        ps <- getPSum xs
+        return (f^.fPrice + ps)
 
 -- | What happens in a firm when an employee quits.
 loseWorker :: Hid -> Firm -> Firm

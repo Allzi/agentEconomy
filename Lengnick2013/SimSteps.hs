@@ -3,46 +3,37 @@ module SimSteps where
 import Prelude hiding (foldl, maximum, minimum)
 import Control.Lens
 import Control.Monad.State.Strict
-import qualified Data.IntMap as Map
-import qualified Data.Sequence as S
-import Data.Foldable
-import Data.List hiding (foldl, maximum, minimum)
-import Debug.Trace
-import System.Random.Mersenne.Pure64
 import Data.Random
-import Control.DeepSeq
+import Data.RVar
 
 import AgentTypes
 import Simulation
 import SimUtils
 import Month
 
--- | Purely runs the simulation with a seed.
+-- | Runs the simulation with a seed.
 simulateSeed :: Int -> [SimData]
 simulateSeed seed = rev
   where
-    gen = pureMT (fromIntegral seed)
-    (dataList, _) = sampleState (runSimulation startSim) gen
-    rev = reverse dataList
-
+    simData = evalState runSimulation (startSim seed)
+    rev = (reverse simData)
 
 -- | Loops simulation, returning the data.
 -- Used in simulateSeed.
-runSimulation :: SimState -> RVar [SimData]
-runSimulation sim =
-    if (sim^.timer._1 < duration) 
-        then do
-            (_, sim') <- runStateT simStep sim
-            runSimulation sim'
-        else return $ sim^.sData
+runSimulation :: Simulation [SimData]
+runSimulation  = do
+    runYears
+    d <- use sData
+    return d
 
 -- | Runs one round of simulation step by step. 
-simStep :: Simulation ()
-simStep = do
-    t <- use $ timer._1
-    when (t == 0) initSimulation
+runYears :: Simulation ()
+runYears = do
     timer._1 += 1
-    runMonths 
+    t <- use $ timer._1
+    when (t == 1) initSimulation
+    runMonths
+    when (t < duration) runYears
 
 -- | Called before first year, sets obligatory random links betwen agents.
 initSimulation :: Simulation ()
@@ -52,10 +43,10 @@ initSimulation = do
     households <$=> initJob fids
   where
     getShops fids h = do
-        rfids <- lift $ shuffleNofM shopN firmN fids
-        return $ h&hShops .~ zip rfids (repeat 0)
+        rfids <- sampleRVar $ shuffleN firmN fids
+        return $ h&hShops .~ take shopN rfids
     initJob fids h = do
-        rfid <- lift $ randomElementN firmN fids
+        rfid <- sampleRVar $ randomElementN firmN fids
         Just f <- use $ firms.at rfid
         let f' = f&fWorkers     %~ ((h^.hID):)
                   &fSize        +~ 1

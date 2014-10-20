@@ -5,7 +5,6 @@ import Data.Colour
 import Data.Colour.Names
 import Data.Default.Class
 import Graphics.Rendering.Chart.Backend.Cairo
-import Control.Monad.State.Strict
 import Control.Lens
 import Data.List
 
@@ -27,13 +26,13 @@ toPlotData d = collectPlots labeled
     d' = transpose d
     labeled = fmap labelData d'
     collectPlots :: PDat -> [(String, PDat)]
-    collectPlots d = fmap (\a -> (fst a, [a])) d
+    collectPlots dat = fmap (\a -> (fst a, [a])) dat
 
 --gives label and x values:
 labelData :: [(String, Double)] -> (String, [(Double, Double)])
-labelData d = (label, points)
+labelData d = (l, points)
   where
-    (label, _) = head d
+    (l, _) = head d
     points = zip [1,2..] (fmap (\(_,a) -> a) d)
 
 

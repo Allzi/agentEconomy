@@ -1,7 +1,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 module AgentTypes where
 import Control.Lens
-import qualified Data.IntMap as Map
+import qualified Data.IntMap.Strict as Map
 
 type Hid = Int
 type HMap = Map.IntMap Household
@@ -14,8 +14,8 @@ type Stuff = Double
 data Household = Household {
     _hID            :: !Hid,
     _hLiquity       :: !Money,
-    _hShops         :: [(Fid, Money)],
-    _hUnsatDemand   :: [(Fid, Money)],
+    _hShops         :: ![Fid],
+    _hUnsatDemand   :: ![(Fid, Money)],
     _hDDemand       :: !Stuff,
     _hEmployer      :: Maybe Fid,
     _hResWage       :: !Money
@@ -48,7 +48,7 @@ makeHousehold :: Hid -> Household
 makeHousehold i = Household {
     _hID            = i,
     _hLiquity       = 100,
-    _hShops         = undefined,
+    _hShops         = [],
     _hUnsatDemand   = [],
     _hDDemand       = 0, --determined later
     _hEmployer      = Nothing,
