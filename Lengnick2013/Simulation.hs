@@ -9,6 +9,7 @@ import Random.Xorshift
 import Prelude hiding (foldl, maximum, minimum)
 import Data.Foldable
 import qualified Data.Vector.Unboxed as V
+import qualified Data.Map as M
 
 import AgentTypes
 import SimUtils
@@ -24,9 +25,9 @@ householdN      = 1000
 -- | The number of firms, default is 100.
 firmN           = 100
 -- | The length of the simulation.
-duration        = 50
+duration        = 200
 -- | Burn-in duration, of which data is not collected.
-burnIn          = 0
+burnIn          = 150
 -- | Months of full staff before the firm starts to lower its wage. 
 -- Default is 1. (There is a mistake in the article)
 rateDropWait    = 1
@@ -90,7 +91,7 @@ mBufferMult     = 0.1
 
 -- |Shorter name for our state.
 -- Under the state monad is RVar from random-fu as a handy source of randomness.
-type Simulation = State SimState
+type Simulation = StateT SimState Identity
 
 -- |The state of the simulation.
 -- Holds the agents, households and firms, with their ids.
@@ -102,7 +103,7 @@ data SimState = SimState {
     _sDividends     :: !Money,
     _sHousWealth    :: !Money,
     _timer          :: !(Int, Int, Int),
-    _sData          :: [SimData],
+    _sData          :: SimData,
     _sRGen          :: Xorshift
     }
 
@@ -118,14 +119,13 @@ startSim s = SimState {
     _sDividends     = 0,
     _sHousWealth    = 0,
     _timer          = (0,0,0),
-    _sData          = [],
+    _sData          = M.empty,
     _sRGen          = gen
     } 
   where
     hids = [0..(householdN-1)]
     fids = [0..(firmN-1)]
     gen = makeXorshift s
-
 
 
 
@@ -139,27 +139,13 @@ $(monadRandom [d|
     |])
 
 
-
-
-
--- * Utility functions 
-
-mapMSim, (<$=>) :: Traversable t => 
-    (Lens' SimState (t a)) ->
-    (a -> Simulation a) -> 
-    Simulation ()
-mapMSim l sim = (l .=) =<< (use l <&> traverse sim & join)
-
-infixl 4 <$=> 
-(<$=>) = mapMSim
-
 -- | All the data is collected here.
 collectData :: Simulation ()
 collectData = do
     t <- use $ timer . _1
     when (t >= burnIn) $ do
         d <- cData
-        d `deepseq` sData %= (d:)
+        d `deepseq` sData %= addSDPoints d
   where
     cData = do
         t <- use $ timer._1
@@ -169,7 +155,7 @@ collectData = do
         fs <- use firms
         let une = foldl calcUne 0 hs
             p = (foldl (\acc f -> acc + f^.fPrice) 0 fs) / fromIntegral firmN
-            usdem = (foldl (\acc f -> acc + f^.fMDemand) 0 fs) / fromIntegral firmN
+            dem = (foldl (\acc f -> acc + f^.fMDemand) 0 fs)
             opos = foldl (\acc f -> acc + f^.fSizeTarget - f^.fSize) 0 fs
             ow = (foldl (\acc f -> acc + f^.fWageRate) 0 fs) / fromIntegral firmN
             aw = (foldl (\acc h -> acc + h^.hResWage) 0 hs) / fromIntegral householdN
@@ -181,7 +167,7 @@ collectData = do
         return [("UnemployedN", une),
                 ("Pricelevel", p),
                 ("Open_Positions", fromIntegral opos),
-                ("Unsatisfied_Demand", usdem),
+                ("Unsatisfied_Demand", dem),
                 ("Offered_Wage", ow),
                 ("Accepted_Wage", aw),
                 ("Household_Wealh", hw),

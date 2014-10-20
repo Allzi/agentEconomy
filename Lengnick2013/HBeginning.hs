@@ -23,7 +23,7 @@ sellerSearch = do
     fs <- use firms
     let sizedFids = fmap getFirmWeight fs
         wSum = sum sizedFids
-    households <$=> updateShops (getRandFid sizedFids wSum)
+    households <%=> updateShops (getRandFid sizedFids wSum)
   where
     getRandFid :: Map.IntMap Double -> Double -> Household -> Simulation Fid
     getRandFid sfs weightSum  h = do
@@ -144,7 +144,7 @@ searchJ h = case h^.hEmployer of
 -- real wealth.
 -- Daily demand is monthly / 21.
 consumptionPlans :: Simulation ()
-consumptionPlans = households <$=> planConsumption
+consumptionPlans = households <%=> planConsumption
   where
     planConsumption :: Household -> Simulation Household
     planConsumption h = do

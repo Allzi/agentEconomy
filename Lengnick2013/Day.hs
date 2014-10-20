@@ -48,16 +48,16 @@ visitShops h d shops sn = do
     Just f <- use $ firms . at fid
     let p = f^.fPrice
         maxAffort = h^.hLiquity / p
-        dem = min maxAffort d
-        actDem = min (f^.fInventory) dem
-        unsat = dem - actDem
+        demForFirm = min maxAffort d
+        boughtAmount = min (f^.fInventory) demForFirm
+        unsat = d - boughtAmount
     
-    let f' = f&fInventory   -~ actDem
-              &fMDemand     +~ dem
-              &fLiquity     +~ actDem*p
+    let f' = f&fInventory   -~ boughtAmount
+              &fMDemand     +~ demForFirm
+              &fLiquity     +~ boughtAmount*p
     firms.ix fid .= f'
     
-    let h' = h&hLiquity     -~ actDem*p
+    let h' = h&hLiquity     -~ boughtAmount*p
               &hUnsatDemand %~ addUnsat fid unsat
         unsatSmallEnough = unsat < (1-endShopTresh) * h^.hDDemand
     if unsatSmallEnough

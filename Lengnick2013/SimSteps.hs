@@ -12,15 +12,15 @@ import SimUtils
 import Month
 
 -- | Runs the simulation with a seed.
-simulateSeed :: Int -> [SimData]
+simulateSeed :: Int -> SimData
 simulateSeed seed = rev
   where
     simData = evalState runSimulation (startSim seed)
-    rev = (reverse simData)
+    rev = fmap reverse simData
 
 -- | Loops simulation, returning the data.
 -- Used in simulateSeed.
-runSimulation :: Simulation [SimData]
+runSimulation :: Simulation SimData
 runSimulation  = do
     runYears
     d <- use sData
@@ -39,8 +39,8 @@ runYears = do
 initSimulation :: Simulation ()
 initSimulation = do
     fids <- use $ firmIds
-    households <$=> getShops fids
-    households <$=> initJob fids
+    households <%=> getShops fids
+    households <%=> initJob fids
   where
     getShops fids h = do
         rfids <- sampleRVar $ shuffleV fids

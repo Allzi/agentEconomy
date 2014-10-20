@@ -6,34 +6,20 @@ import Data.Colour.Names
 import Data.Default.Class
 import Graphics.Rendering.Chart.Backend.Cairo
 import Control.Lens
-import Data.List
+import qualified Data.Map as M
 
 import SimUtils
-
-
-printData :: SimData -> IO()
-printData ((a,b):d) = do
-    print $ a ++ (show b)
-    printData d
-printData _ = return ()
 
 --------------------Chart Making-----------------
 type PDat = [(String, [(Double,Double)])]
 
-toPlotData :: [SimData] -> [(String, PDat)]
-toPlotData d = collectPlots labeled
+toPlotData :: SimData -> [(String, PDat)]
+toPlotData sd = collectPlots labeledList
   where
-    d' = transpose d
-    labeled = fmap labelData d'
+    labeledList = (M.toList.fmap (zip [1, 2..])) sd
     collectPlots :: PDat -> [(String, PDat)]
     collectPlots dat = fmap (\a -> (fst a, [a])) dat
 
---gives label and x values:
-labelData :: [(String, Double)] -> (String, [(Double, Double)])
-labelData d = (l, points)
-  where
-    (l, _) = head d
-    points = zip [1,2..] (fmap (\(_,a) -> a) d)
 
 
 chart :: String -> PDat -> Renderable ()
@@ -53,7 +39,7 @@ chart title ls = toRenderable layout
 dataToChart :: (String, PDat) -> IO (PickFn ())
 dataToChart (n, d) = renderableToFile def (n ++ ".png") (chart n d) 
 
-dataToCharts :: [SimData] -> IO()
+dataToCharts :: SimData -> IO()
 dataToCharts sd = mapM_ dataToChart d
   where 
     d = toPlotData sd

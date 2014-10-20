@@ -6,13 +6,13 @@ import Control.Lens
 
 import AgentTypes
 import Simulation
-
+import SimUtils
 
 accountingStep :: Simulation ()
 accountingStep = do
     firms %= fmap payWages
     sDividends .= 0 
-    firms <$=> payDividends
+    firms <%=> payDividends
 
 payWages :: Firm -> Firm
 payWages f = f'

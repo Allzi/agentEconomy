@@ -2,18 +2,46 @@
 module SimUtils where
 import Control.Applicative
 import Data.Random
+import Control.Lens
+import Control.Monad.State.Strict
 import qualified Data.Vector.Unboxed as V
 import qualified Data.Vector.Unboxed.Mutable as VM
 import Control.Monad.ST
+import qualified Data.Map as M
+
+-- * Simulation handling
+
+-- | Type for storing output of simulation.
+type SimData = M.Map String [Double]
 
 
-type SimData = [(String, Double)]
+addSDPoint :: (String, Double) -> SimData -> SimData
+addSDPoint (key, d) = M.insertWith (++) key [d]
+
+addSDPoints :: [(String, Double)] -> SimData -> SimData
+addSDPoints [] = id
+addSDPoints (dp:sdat) = (addSDPoint dp).(addSDPoints sdat)
+
+-- | MapMSim traverses trough a traversable in (Simulation) State, executing
+-- the result and modifying it.
+-- <%=> works just like %=, but gets function in the State monad instead.
+-- The action should not directly depend on other members of the traversed 
+-- data structure.
+mapMSim, (<%=>) :: (Traversable t, Monad (StateT s m), Monad m, Functor m) =>
+    (Lens' s (t a)) -> (a -> StateT s m a) -> StateT s m ()
+{-# INLINE mapMSim #-}
+mapMSim l sim = (l .=) =<< (use l <&> traverse sim & join)
 
 
---------------------New utilities-------------------------
+infixl 4 <%=> 
+(<%=>) = mapMSim
 
+-- * Random Utilities
 
+-- | Get a random element from a vector.
+-- O(1)
 randomElementV :: V.Unbox a =>  V.Vector a -> RVar a
+{-# INLINE randomElementV #-}
 randomElementV vec
   | V.null vec = error "empty vector"
   | otherwise = do
@@ -24,6 +52,7 @@ randomElementV vec
 -- | Shuffle for all those id-vectors!
 -- For performance!
 shuffleV :: V.Unbox a => V.Vector a -> RVar (V.Vector a)
+{-# INLINE shuffleV #-}
 shuffleV vec
   | V.null vec = return vec
   | otherwise  = do
@@ -42,10 +71,12 @@ shuffleV vec
 -- argument. The first argument tells the maximum relative adjustment.
 -- Giving negative maximum adjustment makes the adjustment negative.
 uniformAdj :: Double -> Double -> RVar Double
+{-# INLINE uniformAdj #-}
 uniformAdj adj a = (\r -> a * (1 + adj * r)) <$> stdUniform
 
-
+-- | A random element getter, which saves counting the length of the list.
 randomElementN :: Int -> [a] -> RVar a
+{-# INLINE randomElementN #-}
 randomElementN _ [] = error "Empty list!"
 randomElementN n xs = do
     i <- uniformT 0 (n - 1)
@@ -54,6 +85,7 @@ randomElementN n xs = do
 -- | Like randomElementN, but also returns the list without the selected
 -- element.
 randomElementNR :: Int -> [a] -> RVar (a, [a])
+{-# INLINE randomElementNR #-}
 randomElementNR _ [] = error "Empty list!"
 randomElementNR 0 _  = error "Empty list?!"
 randomElementNR n xs = do
@@ -64,6 +96,7 @@ randomElementNR n xs = do
 
 -- | Old version of weighted random.
 whRandElem' :: [a] -> (a -> Double) -> Double -> RVar a
+{-# INLINE whRandElem' #-}
 whRandElem' list weight m = do
     r <- uniformT 0 m
     fetchElem r list
@@ -80,6 +113,7 @@ whRandElem' list weight m = do
 -- Weights are given in the second element of tuple inside the list,
 -- and their sum should be one.
 whRandElem :: [(a, Double)] -> RVar a
+{-# INLINE whRandElem #-}
 whRandElem ls = do
     r <- stdUniform
     return $ go ls r

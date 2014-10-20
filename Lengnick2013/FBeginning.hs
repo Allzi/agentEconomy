@@ -24,7 +24,7 @@ import SimUtils
 planStep :: Simulation ()
 planStep = do
     firms %= fmap isFullStaff
-    firms <$=> (adjustWage >=> fire >=> setEmpTarget >=> return . clear)
+    firms <%=> (adjustWage >=> fire >=> setEmpTarget >=> return . clear)
   where
     clear f = f&fMDemand .~ 0
     isFullStaff f = if (f^.fSizeTarget <= f^.fSize)
@@ -36,7 +36,7 @@ adjustWage f = do
     wage <- if 
         | f^.fSizeTarget > f^.fSize -> 
             sampleRVar $ uniformAdj wageAdj (f^.fWageRate)
-        | f^.fFullStaffMonths < rateDropWait -> return (f^.fWageRate)
+        | f^.fFullStaffMonths < rateDropWait + 1 -> return (f^.fWageRate)
         | otherwise ->
             sampleRVar $ uniformAdj (-wageAdj) (f^.fWageRate)
     return $ f&fWageRate .~ wage
@@ -51,9 +51,10 @@ fire f = if (f^.fFiring) &&             -- Is firing decision triggered?
     then do
         hid <- sampleRVar $ randomElementN (f^.fSize) (f^.fWorkers)
         households.ix hid %= (\h -> h&hEmployer .~ Nothing)
-        return $ f&fSize            -~ 1
+        let newSize = (f^.fSize - 1)
+        return $ f&fSize            .~ newSize
                   &fWorkers         %~ filter (/=hid)
-                  &fSizeTarget .~ (f^.fSize - 1)
+                  &fSizeTarget      .~ newSize
     else return $ f
 
 setEmpTarget :: Firm -> Simulation Firm

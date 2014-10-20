@@ -7,11 +7,12 @@ import Data.Foldable
 
 import AgentTypes
 import Simulation
+import SimUtils
 
 
 incomeGetting :: Simulation ()
 incomeGetting = do
-    households <$=> getWageInc
+    households <%=> getWageInc
     calcWealth
     w <- use sHousWealth
     d <- use sDividends
