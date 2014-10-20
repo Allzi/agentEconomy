@@ -2,6 +2,10 @@
 module SimUtils where
 import Control.Applicative
 import Data.Random
+import qualified Data.Vector.Unboxed as V
+import qualified Data.Vector.Unboxed.Mutable as VM
+import Control.Monad.ST
+
 
 type SimData = [(String, Double)]
 
@@ -9,6 +13,30 @@ type SimData = [(String, Double)]
 --------------------New utilities-------------------------
 
 
+randomElementV :: V.Unbox a =>  V.Vector a -> RVar a
+randomElementV vec
+  | V.null vec = error "empty vector"
+  | otherwise = do
+    let l = V.length vec
+    i <- uniformT 0 (l - 1)
+    return (V.unsafeIndex vec i)
+
+-- | Shuffle for all those id-vectors!
+-- For performance!
+shuffleV :: V.Unbox a => V.Vector a -> RVar (V.Vector a)
+shuffleV vec
+  | V.null vec = return vec
+  | otherwise  = do
+    let lst = V.length vec - 1
+    ind <- V.generateM lst (\i -> uniformT 0 (i + 1))
+    return $ runST $ do
+        mvec <- V.thaw vec
+        let loop i
+              | i == 0    = V.unsafeFreeze mvec
+              | otherwise = do
+                  VM.unsafeSwap mvec i (ind `V.unsafeIndex` (i - 1))
+                  loop (i - 1)
+        loop lst
 
 -- | An utility function, that adjusts uniformly the double given as the second
 -- argument. The first argument tells the maximum relative adjustment.

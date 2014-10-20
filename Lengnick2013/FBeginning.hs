@@ -6,8 +6,7 @@ import Prelude hiding (sum, foldl, any, mapM_)
 
 import Control.Lens
 import Control.Monad.State.Strict hiding (mapM_)
-import Data.Foldable
-import Data.Random
+
 import Data.Random.Distribution.Bernoulli
 import Data.RVar
 

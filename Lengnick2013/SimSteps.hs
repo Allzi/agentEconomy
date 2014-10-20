@@ -3,8 +3,8 @@ module SimSteps where
 import Prelude hiding (foldl, maximum, minimum)
 import Control.Lens
 import Control.Monad.State.Strict
-import Data.Random
 import Data.RVar
+import qualified Data.Vector.Unboxed as V
 
 import AgentTypes
 import Simulation
@@ -43,10 +43,10 @@ initSimulation = do
     households <$=> initJob fids
   where
     getShops fids h = do
-        rfids <- sampleRVar $ shuffleN firmN fids
-        return $ h&hShops .~ take shopN rfids
+        rfids <- sampleRVar $ shuffleV fids
+        return $ h&hShops .~ take shopN (V.toList rfids)
     initJob fids h = do
-        rfid <- sampleRVar $ randomElementN firmN fids
+        rfid <- sampleRVar $ randomElementV fids
         Just f <- use $ firms.at rfid
         let f' = f&fWorkers     %~ ((h^.hID):)
                   &fSize        +~ 1

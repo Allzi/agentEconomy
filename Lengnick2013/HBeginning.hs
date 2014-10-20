@@ -9,9 +9,9 @@ import Prelude hiding (sum, foldl, any, mapM_, elem)
 import Control.Lens
 import qualified Data.IntMap.Strict as Map
 import Data.Foldable
-import Data.Random
 import Data.RVar
 import Data.Random.Distribution.Bernoulli
+import qualified Data.Vector.Unboxed as V
 
 import AgentTypes
 import Simulation
@@ -66,8 +66,8 @@ updateShops getRandFid hous = pSearch hous >>= qSearch
                     sampleRVar $ whRandElem' (h^.hUnsatDemand) snd totWeight
                 --Get a new random firm, which replaces old one.
                 fids <- use firmIds
-                let filteredFids = filter (not.(`elem` (h^.hShops))) fids
-                newS  <- sampleRVar $  randomElementN (firmN - shopN) filteredFids
+                let filteredFids = V.filter (not.(`elem` (h^.hShops))) fids
+                newS  <- sampleRVar $  randomElementV filteredFids
                 
                 let h' = h&hShops %~ replaceShop toReplace newS
                 return h'
@@ -83,8 +83,8 @@ updateShops getRandFid hous = pSearch hous >>= qSearch
 jobSearch :: Simulation ()
 jobSearch = do
     hids <- use householdIds
-    shuffled <- sampleRVar $ shuffleN householdN hids
-    mapM_ search shuffled
+    shuffled <- sampleRVar $ shuffleV hids
+    V.mapM_ search shuffled
   where
     search hid = do
         Just h <- use $ households . at hid
@@ -114,7 +114,7 @@ searchJ h = case h^.hEmployer of
     searchGoodEnough 0 = return h
     searchGoodEnough i = do
         fids <- use firmIds
-        fid <- sampleRVar $ randomElementN firmN fids -- FIXME: no two times the same firm
+        fid <- sampleRVar $ randomElementV fids -- FIXME: no two times the same firm
         Just f <- use $ firms.at fid
         if (f^.fWageRate > h^.hResWage) && isHiring f
             then do
@@ -126,7 +126,7 @@ searchJ h = case h^.hEmployer of
     searchBetter :: Firm -> Simulation Household
     searchBetter f = do
         fids <- use firmIds
-        rFid <- sampleRVar $ randomElementN (firmN - 1) (filter (/=(f^.fID)) fids)
+        rFid <- sampleRVar $ randomElementV (V.filter (/=(f^.fID)) fids)
         Just f2 <- use $ firms.at rFid
         if isHiring f2 && 
            (f2^.fWageRate > f^.fWageRate) &&

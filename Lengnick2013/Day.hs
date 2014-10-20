@@ -1,8 +1,8 @@
 module Day where
 import Control.Lens
 import Control.Monad.State.Strict
-import Data.Random
 import Data.RVar
+import qualified Data.Vector.Unboxed as V
 
 import AgentTypes
 import Simulation
@@ -28,8 +28,8 @@ runDays = do
 buyGoods :: Simulation ()
 buyGoods = do
     hids <- use householdIds
-    shuffleds <- sampleRVar $ shuffleN householdN hids
-    mapM_ makeVisits shuffleds
+    shuffleds <- sampleRVar $ shuffleV hids
+    V.mapM_ makeVisits shuffleds
   where
     makeVisits :: Hid -> Simulation ()
     makeVisits hid = do

@@ -8,6 +8,7 @@ import Random.Xorshift
 
 import Prelude hiding (foldl, maximum, minimum)
 import Data.Foldable
+import qualified Data.Vector.Unboxed as V
 
 import AgentTypes
 import SimUtils
@@ -95,9 +96,9 @@ type Simulation = State SimState
 -- Holds the agents, households and firms, with their ids.
 data SimState = SimState {
     _households     :: !HMap,
-    _householdIds   :: [Hid],
+    _householdIds   :: V.Vector Hid,
     _firms          :: !FMap,
-    _firmIds        :: [Fid],
+    _firmIds        :: V.Vector Fid,
     _sDividends     :: !Money,
     _sHousWealth    :: !Money,
     _timer          :: !(Int, Int, Int),
@@ -111,9 +112,9 @@ makeLenses ''SimState
 startSim :: Int -> SimState
 startSim s = SimState {
     _households     = makeMapWith hids makeHousehold,
-    _householdIds   = hids,
+    _householdIds   = V.fromList hids,
     _firms          = makeMapWith fids makeFirm,
-    _firmIds        = fids,
+    _firmIds        = V.fromList fids,
     _sDividends     = 0,
     _sHousWealth    = 0,
     _timer          = (0,0,0),
