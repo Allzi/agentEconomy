@@ -11,6 +11,7 @@ main = do
     createDirectoryIfMissing False "Output"
     setCurrentDirectory "Output"
     dataToCharts simData
+    simDataToCSV simData
     print "Simulation done."
 
 

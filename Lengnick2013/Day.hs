@@ -60,14 +60,12 @@ visitShops h d shops sn = do
     let h' = h&hLiquity     -~ boughtAmount*p
               &hUnsatDemand %~ addUnsat fid unsat
         unsatSmallEnough = unsat < (1-endShopTresh) * h^.hDDemand
-    if unsatSmallEnough
+    if unsatSmallEnough || (h'^.hLiquity) <= 0
         then return h'
         else visitShops h' unsat remainingShops (sn - 1)
   where
     addUnsat :: Fid -> Double -> [(Fid, Double)]-> [(Fid, Double)]
-    addUnsat fid1 u xs = if u > 0 
-        then go xs
-        else xs
+    addUnsat fid1 u = if u > 0 then go else id
       where
         go [] = [(fid1, u)]
         go ((fid2, ud):ls) = if fid2 == fid1

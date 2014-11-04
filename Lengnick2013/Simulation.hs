@@ -142,42 +142,75 @@ $(monadRandom [d|
 -- | All the data is collected here.
 collectData :: Simulation ()
 collectData = do
-    t <- use $ timer . _1
-    when (t >= burnIn) $ do
-        d <- cData
-        d `deepseq` sData %= addSDPoints d
+    t <- use $ timer._1
+    hw <- use sHousWealth
+    divid <- use sDividends
+    hs <- use households
+    fs <- use firms
+    let -- Price levels:
+        p = (foldl (\acc f -> acc + f^.fPrice) 0 fs) / fromIntegral firmN
+        --maxPrice = (maximum . fmap (\f -> f^.fPrice)) fs
+        --minPrice = (minimum . fmap (\f -> f^.fPrice)) fs
+    
+        -- Employment and wage:
+        une = foldl calcUne 0 hs
+        opos = foldl (\acc f -> acc + f^.fSizeTarget - f^.fSize) 0 fs
+        
+        -- Demand met:
+        dem = (foldl (\acc f -> acc + f^.fMDemand) 0 fs) / fromIntegral firmN
+        
+        -- Offered and accepted wages:
+        ow = (foldl (\acc f -> acc + f^.fWageRate) 0 fs) / fromIntegral firmN
+        aw = (foldl (\acc h -> acc + h^.hResWage) 0 hs) / fromIntegral householdN
+        
+        -- Inventories:
+        invs = foldl (\acc f -> acc + f^.fInventory) 0 fs / fromIntegral firmN
+
+        --Sizes
+        maxSize = (maximum . fmap (\f -> fromIntegral (f^.fSize))) fs
+        minSize = (minimum . fmap (\f -> fromIntegral (f^.fSize))) fs
+
+        maxWealth = (maximum . fmap (\h -> h^.hLiquity)) hs
+        
+        --Random firms
+        Just f1 = fs^.at 0
+
+        f1p = f1^.fPrice
+        f1i = f1^.fInventory
+        f1s = fromIntegral (f1^.fSize)
+        f1w = f1^.fWageRate
+        f1md = f1^.fMDemand
+
+    when (t > burnIn) $ do
+        seqAdd "Prices" 
+            [("Pricelevel", p)
+            ,("Random", f1p)]
+        seqAdd "Inventories"
+            [("Inventories",   invs)
+            ,("Random", f1i)]
+        seqAdd "Wages"
+            [("Offered_Wage",   ow)
+            ,("Accepted_Wage",  aw)
+            ,("Random", f1w)]
+        seqAdd "Seen_Demand"
+            [("Seen_Demand",   dem)
+            ,("Random", f1md)]
+        seqAdd "Wealth"
+            [("Household_Wealh",     hw)
+            ,("Aggregate_Dividends", divid)]
+        seqAdd "Employment"
+            [("UnemployedN",    une)
+            ,("Open_Positions", fromIntegral opos)]
+        seqAdd "Sizes"
+            [("maxSize",  maxSize)
+            ,("minSize",  minSize)
+            ,("Random", f1s)]
+        seqAdd "Time" [("Time", fromIntegral t)]
+        seqAdd "Richest" [("Richest", maxWealth)]
+
+            
   where
-    cData = do
-        t <- use $ timer._1
-        hw <- use sHousWealth
-        divid <- use sDividends
-        hs <- use households
-        fs <- use firms
-        let une = foldl calcUne 0 hs
-            p = (foldl (\acc f -> acc + f^.fPrice) 0 fs) / fromIntegral firmN
-            dem = (foldl (\acc f -> acc + f^.fMDemand) 0 fs)
-            opos = foldl (\acc f -> acc + f^.fSizeTarget - f^.fSize) 0 fs
-            ow = (foldl (\acc f -> acc + f^.fWageRate) 0 fs) / fromIntegral firmN
-            aw = (foldl (\acc h -> acc + h^.hResWage) 0 hs) / fromIntegral householdN
-            invs = (foldl (\acc f -> acc + f^.fInventory) 0 fs) / fromIntegral firmN
-            maxPrice = (maximum . fmap (\f -> f^.fPrice)) fs
-            minPrice = (minimum . fmap (\f -> f^.fPrice)) fs
-            maxSize = (maximum . fmap (\f -> fromIntegral (f^.fSize))) fs
-            minSize = (minimum . fmap (\f -> fromIntegral (f^.fSize))) fs
-        return [("UnemployedN", une),
-                ("Pricelevel", p),
-                ("Open_Positions", fromIntegral opos),
-                ("Unsatisfied_Demand", dem),
-                ("Offered_Wage", ow),
-                ("Accepted_Wage", aw),
-                ("Household_Wealh", hw),
-                ("Aggregate Dividends", divid),
-                ("Inventories", invs),
-                ("maxPrice", maxPrice),
-                ("maxSize", maxSize),
-                ("minSize", minSize),
-                ("minPrice", minPrice),
-                ("Time", fromIntegral t)]
+    seqAdd t d = d `deepseq` sData %= dataToTable t d
     calcUne acc h = if h^.hEmployer == Nothing
         then acc + 1
         else acc

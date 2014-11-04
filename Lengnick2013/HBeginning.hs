@@ -50,7 +50,7 @@ updateShops getRandFid hous = pSearch hous >>= qSearch
                 fid2 <- getRandFid h
                 Just f1 <- use $ firms.at fid1
                 Just f2 <- use $ firms.at fid2
-                return $ if f1^.fPrice > f2^.fPrice * (1 - diffToReplace)
+                return $ if f1^.fPrice > f2^.fPrice * (1 + diffToReplace)
                     then h&hShops %~ replaceShop fid1 fid2
                           &hUnsatDemand %~ filter (\a -> fst a /= fid1)
                     else h

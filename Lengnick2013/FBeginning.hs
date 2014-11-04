@@ -61,7 +61,7 @@ setEmpTarget :: Firm -> Simulation Firm
 setEmpTarget f = if
     | (f^.fInventory < iLowerBound * f^.fMDemand) -> do
         let f' = f&fFiring .~ False
-                  &fSizeTarget .~ max ((f^.fSize) + 1) (f^.fSizeTarget)
+                  &fSizeTarget %~ max ((f^.fSize) + 1)
         risePrice f'
     | f^.fInventory > iUpperBound * f^.fMDemand -> do
         let f' = f&fFiring .~ True

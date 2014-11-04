@@ -12,15 +12,23 @@ import qualified Data.Map as M
 -- * Simulation handling
 
 -- | Type for storing output of simulation.
-type SimData = M.Map String [Double]
+type SimData = M.Map String SimTable
+type SimTable = M.Map String [Double]
+
+dataToTable :: String -> [(String, Double)] -> SimData -> SimData
+dataToTable key ls sd = M.insertWith mergeAdd key ms sd
+  where
+    mergeAdd = M.unionWith (++)
+    ms = fmap (\a -> [a]) $ M.fromList ls
 
 
-addSDPoint :: (String, Double) -> SimData -> SimData
+addSDPoint :: (String, Double) -> SimTable -> SimTable
 addSDPoint (key, d) = M.insertWith (++) key [d]
 
-addSDPoints :: [(String, Double)] -> SimData -> SimData
+addSDPoints :: [(String, Double)] -> SimTable -> SimTable
 addSDPoints [] = id
 addSDPoints (dp:sdat) = (addSDPoint dp).(addSDPoints sdat)
+
 
 -- | MapMSim traverses trough a traversable in (Simulation) State, executing
 -- the result and modifying it.
@@ -97,8 +105,8 @@ randomElementNR n xs = do
 -- | Old version of weighted random.
 whRandElem' :: [a] -> (a -> Double) -> Double -> RVar a
 {-# INLINE whRandElem' #-}
-whRandElem' list weight m = do
-    r <- uniformT 0 m
+whRandElem' list weight whSum = do
+    r <- uniformT 0 whSum
     fetchElem r list
   where
     fetchElem r (l:ls) = do

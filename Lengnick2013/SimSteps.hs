@@ -16,7 +16,7 @@ simulateSeed :: Int -> SimData
 simulateSeed seed = rev
   where
     simData = evalState runSimulation (startSim seed)
-    rev = fmap reverse simData
+    rev = (fmap.fmap) reverse simData
 
 -- | Loops simulation, returning the data.
 -- Used in simulateSeed.
