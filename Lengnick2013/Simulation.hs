@@ -25,9 +25,9 @@ householdN      = 1000
 -- | The number of firms, default is 100.
 firmN           = 100
 -- | The length of the simulation.
-duration        = 200
+duration        = 250
 -- | Burn-in duration, of which data is not collected.
-burnIn          = 150
+burnIn          = 200
 -- | Months of full staff before the firm starts to lower its wage. 
 -- Default is 1. (There is a mistake in the article)
 rateDropWait    = 1
@@ -173,21 +173,33 @@ collectData = do
         maxWealth = (maximum . fmap (\h -> h^.hLiquity)) hs
         
         --Random firms
-        Just f1 = fs^.at 0
+        Just f1 = fs^.at 97
+        
+        mrc f = f^.fWageRate / (productivity * fromIntegral daysInMonth)
 
         f1p = f1^.fPrice
+        f1pl = mrc f1 * pLowerBound
+        f1pu = mrc f1 * pUpperBound
         f1i = f1^.fInventory
+        f1il = f1^.fMDemand * iLowerBound
+        f1iu = f1^.fMDemand * iUpperBound
         f1s = fromIntegral (f1^.fSize)
+        f1st = fromIntegral (f1^.fSizeTarget)
         f1w = f1^.fWageRate
         f1md = f1^.fMDemand
+        f1liq = f1^.fLiquity
 
     when (t > burnIn) $ do
         seqAdd "Prices" 
             [("Pricelevel", p)
-            ,("Random", f1p)]
+            ,("Random", f1p)
+            ,("LowerBound", f1pl)
+            ,("UpperBound", f1pu)]
         seqAdd "Inventories"
             [("Inventories",   invs)
-            ,("Random", f1i)]
+            ,("Random", f1i)
+            ,("Rand_LBound", f1il)
+            ,("Rand_UBound", f1iu)]
         seqAdd "Wages"
             [("Offered_Wage",   ow)
             ,("Accepted_Wage",  aw)
@@ -198,15 +210,17 @@ collectData = do
         seqAdd "Wealth"
             [("Household_Wealh",     hw)
             ,("Aggregate_Dividends", divid)]
-        seqAdd "Employment"
-            [("UnemployedN",    une)
-            ,("Open_Positions", fromIntegral opos)]
         seqAdd "Sizes"
             [("maxSize",  maxSize)
             ,("minSize",  minSize)
-            ,("Random", f1s)]
-        seqAdd "Time" [("Time", fromIntegral t)]
-        seqAdd "Richest" [("Richest", maxWealth)]
+            ,("Random", f1s)
+            ,("Target", f1st)]
+        seqAdd "Employment"     [("UnemployedN",    une)]
+        seqAdd "OpenPositions"  [("Open_Positions", fromIntegral opos)]
+        seqAdd "Liquity"        [("RFirm", f1liq)]
+        seqAdd "Time"           [("Time", fromIntegral t)]
+        seqAdd "Richest"        [("Richest", maxWealth)]
+        seqAdd "Margin"         [("Margin", f1p - mrc f1)]
 
             
   where

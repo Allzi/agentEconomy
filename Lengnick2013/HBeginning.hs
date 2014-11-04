@@ -50,7 +50,7 @@ updateShops getRandFid hous = pSearch hous >>= qSearch
                 fid2 <- getRandFid h
                 Just f1 <- use $ firms.at fid1
                 Just f2 <- use $ firms.at fid2
-                return $ if f1^.fPrice > f2^.fPrice * (1 + diffToReplace)
+                return $ if f1^.fPrice * (1-diffToReplace) > f2^.fPrice
                     then h&hShops %~ replaceShop fid1 fid2
                           &hUnsatDemand %~ filter (\a -> fst a /= fid1)
                     else h
@@ -98,7 +98,9 @@ jobSearch = do
 -- intensities.
 searchJ :: Household -> Simulation Household
 searchJ h = case h^.hEmployer of
-    Nothing -> searchGoodEnough unempVisits
+    Nothing -> do
+        fids <- use firmIds
+        searchGoodEnough unempVisits fids
     Just fid -> do
         Just f <- use $ firms.at fid
         -- Satisfication with current wage.
@@ -110,18 +112,19 @@ searchJ h = case h^.hEmployer of
             then searchBetter f
             else return h
   where 
-    searchGoodEnough :: Int -> Simulation Household
-    searchGoodEnough 0 = return h
-    searchGoodEnough i = do
-        fids <- use firmIds
-        fid <- sampleRVar $ randomElementV fids -- FIXME: no two times the same firm
+    searchGoodEnough :: Int -> V.Vector Fid -> Simulation Household
+    searchGoodEnough 0 _ = return h
+    searchGoodEnough i fids = do
+        fid <- sampleRVar $ randomElementV fids
         Just f <- use $ firms.at fid
         if (f^.fWageRate > h^.hResWage) && isHiring f
             then do
                 let f' = hireWorker (h^.hID) f
                 firms.ix fid .= f'
                 return $ h&hEmployer .~ Just fid
-            else searchGoodEnough (i-1)
+            else do
+                let fids' = V.filter (/=fid) fids
+                searchGoodEnough (i-1) fids'
 
     searchBetter :: Firm -> Simulation Household
     searchBetter f = do

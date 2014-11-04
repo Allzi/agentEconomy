@@ -65,7 +65,7 @@ visitShops h d shops sn = do
         else visitShops h' unsat remainingShops (sn - 1)
   where
     addUnsat :: Fid -> Double -> [(Fid, Double)]-> [(Fid, Double)]
-    addUnsat fid1 u = if u > 0 then go else id
+    addUnsat fid1 u = if u > 0.000000001 then go else id
       where
         go [] = [(fid1, u)]
         go ((fid2, ud):ls) = if fid2 == fid1

@@ -26,8 +26,8 @@ planStep = do
     firms %= fmap isFullStaff
     firms <%=> (adjustWage >=> fire >=> setEmpTarget >=> return . clear)
   where
-    clear f = f&fMDemand .~ 0
-    isFullStaff f = if (f^.fSizeTarget <= f^.fSize)
+    clear = fMDemand .~ 0
+    isFullStaff f = if f^.fSizeTarget <= f^.fSize
         then f&fFullStaffMonths +~ 1
         else f&fFullStaffMonths .~ 0
 
@@ -51,11 +51,11 @@ fire f = if (f^.fFiring) &&             -- Is firing decision triggered?
     then do
         hid <- sampleRVar $ randomElementN (f^.fSize) (f^.fWorkers)
         households.ix hid %= (\h -> h&hEmployer .~ Nothing)
-        let newSize = (f^.fSize - 1)
+        let newSize = f^.fSize - 1
         return $ f&fSize            .~ newSize
                   &fWorkers         %~ filter (/=hid)
                   &fSizeTarget      .~ newSize
-    else return $ f
+    else return f
 
 setEmpTarget :: Firm -> Simulation Firm
 setEmpTarget f = if
@@ -63,7 +63,7 @@ setEmpTarget f = if
         let f' = f&fFiring .~ False
                   &fSizeTarget %~ max ((f^.fSize) + 1)
         risePrice f'
-    | f^.fInventory > iUpperBound * f^.fMDemand -> do
+    | (f^.fInventory > iUpperBound * f^.fMDemand) -> do
         let f' = f&fFiring .~ True
                   &fSizeTarget .~ (f^.fSize) - 1
         dropPrice f'
@@ -77,7 +77,7 @@ setEmpTarget f = if
 risePrice :: Firm -> Simulation Firm
 risePrice f = do
     doesRise <- sampleRVar $ bernoulli priceAdjProb
-    if doesRise && (f^.fPrice < pLowerBound * mrc f)
+    if doesRise && (f^.fPrice < pUpperBound * mrc f)
         then do
             newp <- sampleRVar $ uniformAdj priceAdj (f^.fPrice) 
             return $ f&fPrice .~ newp
@@ -88,7 +88,7 @@ risePrice f = do
 dropPrice :: Firm -> Simulation Firm
 dropPrice f = do
     doesChange <- sampleRVar $ bernoulli priceAdjProb
-    if doesChange && (f^.fPrice > pUpperBound * mrc f)
+    if doesChange && (f^.fPrice > pLowerBound * mrc f)
         then do
             newp <- sampleRVar $ uniformAdj (-priceAdj) (f^.fPrice) 
             return $ f&fPrice .~ newp

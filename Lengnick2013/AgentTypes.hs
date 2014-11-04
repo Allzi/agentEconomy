@@ -47,7 +47,7 @@ makeMapWith ids a = Map.fromList $ fmap (\i -> (i, a i)) ids
 makeHousehold :: Hid -> Household
 makeHousehold i = Household {
     _hID            = i,
-    _hLiquity       = 100,
+    _hLiquity       = 98.78,
     _hShops         = [],
     _hUnsatDemand   = [],
     _hDDemand       = 0, --determined later
